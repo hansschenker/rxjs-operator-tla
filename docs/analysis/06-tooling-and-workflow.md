@@ -5,16 +5,16 @@ model checking an operator does and does not tell you about the real one.
 
 ## 1. What was verified
 
-All forty-eight configurations in `specs/manifest.json` were run through
+All fifty-four configurations in `specs/manifest.json` were run through
 both checkers on 2026-10-30:
 
 - **TLC**, version 2026.10.28, the `tla2tools.jar` bundled with the VS Code
   TLA+ extension, on a Temurin 21 JRE.
 - **tla-ts** 0.0.3 from npm, a TypeScript reimplementation of TLC.
 
-Every outcome matched the manifest on both engines. On the twenty-six
+Every outcome matched the manifest on both engines. On the twenty-nine
 passing configurations the two engines reported identical state counts. On
-the twenty-two deliberately failing ones the counts differ for several
+the twenty-five deliberately failing ones the counts differ for several
 (`Flatten_bug_mergeForSwitch`: TLC 166 / 89, tla-ts 41 / 31;
 `Share_leak_demo`: TLC around 170 / 141, tla-ts 5 / 5; `Share_restart_demo`:
 TLC around 195 / 178, tla-ts 26 / 23), which is expected: a run stops at the
@@ -73,6 +73,12 @@ the counterexample were the same in every case.
 | `RetryThenCatch_reversed.cfg` | pass | 3 244 / 1 972 | same |
 | `RetryThenCatch_bug_reversedNoRetry.cfg` | `FallbackCompletesOnlyAfterRetries` violated | varies by run | 16 / 15 |
 | `RetryThenCatch_bug_reversedRepeats.cfg` | `FallbackRunsAtMostOnce` violated | varies by run | 48 / 42 |
+| `ForkJoinGuarded_take1.cfg` | pass | 175 / 89 | same |
+| `ForkJoinGuarded_none_chatty_demo.cfg` | `EventuallyTerminal` violated | 765 / 377 | same |
+| `ForkJoinGuarded_take1_silent_demo.cfg` | `EventuallyTerminal` violated | 175 / 89 | same |
+| `ForkJoinGuarded_timer.cfg` | pass | 5 143 / 2 008 | same |
+| `ForkJoinGuarded_timer_empty_demo.cfg` | `BranchCompletesWithValue` violated | varies by run | 72 / 56 |
+| `ForkJoinGuarded_timerDefault.cfg` | pass | 5 359 / 2 072 | same |
 
 Every run except the three `Share` configurations finished in under a
 second. Those three, at up to 439 177 distinct states, took two to four
@@ -210,6 +216,8 @@ answer. They are the fastest way to learn what each guard is for.
 | `NotCompleteWhileTermsActive` with `Placement = "outside"` | `CatchInSwitchMap` | violated in three steps: the fallback completes, so does the output | the same bug seen as an unexpected completion |
 | `FallbackCompletesOnlyAfterRetries` with `Order = "catchFirst"` | `RetryThenCatch` | violated in three steps: one error, the fallback delivers and completes | `catchError` before `retry`: the source is never retried |
 | `FallbackRunsAtMostOnce` with `Order = "catchFirst"` | `RetryThenCatch` | violated: error, fallback errors, retry, error, fallback again | `catchError` before `retry`: the fallback's side effects repeat |
+| `Guard = "take1"` under `SpecSilentB` | `ForkJoinGuarded` | `EventuallyTerminal` violated, stuttering | `take(1)` cures a source that never completes, not one that never delivers |
+| `Guard = "takeUntilTimer"` | `ForkJoinGuarded` | `BranchCompletesWithValue` violated: two ticks, the timer fires on an empty branch | `takeUntil(timer)` ends the hang but can make `forkJoin` complete without a value |
 | `WF_vars(Fire)` removed from `Spec` | `DebounceTime` | `PendingResolves` violated | a timer that is scheduled but never run |
 | `pending' = None` removed from `SourceError` | `DebounceTime` | `NothingPendingWhenDone` violated | state left behind after teardown |
 
@@ -274,7 +282,7 @@ tla-ts is young (version 0.0.3, a single maintainer) and a wrong "pass"
 from a model checker is the worst failure it can have. What this session
 established:
 
-- On these forty-eight configurations, tla-ts and TLC agree on every outcome,
+- On these fifty-four configurations, tla-ts and TLC agree on every outcome,
   every violated property, and every state count of a complete run,
   including the three `Share` models of several hundred thousand states.
 - It handled everything the specs use: `EXTENDS` of a local module, model
@@ -309,15 +317,15 @@ the two ever disagreeing.
 
 In order of expected payoff:
 
-1. **`forkJoin` with `take(1)` or `takeUntil`** on a never-completing
-   source, the pipeline-level cure for the hang in `ForkJoin_silentB_demo`,
-   checked as `EventuallyTerminal` under `SpecFairA`.
-2. **`SearchAndSave` with errors and a timed save**: a failing save
+1. **`SearchAndSave` with errors and a timed save**: a failing save
    (does `retry` on the inner keep the queue intact?) and a `Tick` so that
    the delay between a result and its acknowledgement is bounded.
-3. **`share` with a delayed reset**, `resetOnRefCountZero: () => timer(D)`,
+2. **`share` with a delayed reset**, `resetOnRefCountZero: () => timer(D)`,
    which combines `Share.tla` with the `Tick` machinery of part 04 and is
    where the subscribe-during-reset races live.
-4. **The conformance tests** of section 6, one per spec, so that the models
+3. **The conformance tests** of section 6, one per spec, so that the models
    are tied to RxJS 7's actual behaviour.
-5. **A trace-to-marble script** on top of tla-ts's `check()` output.
+4. **A trace-to-marble script** on top of tla-ts's `check()` output.
+
+The guarded `forkJoin` from the earlier version of this list is done:
+part 05, section 11.

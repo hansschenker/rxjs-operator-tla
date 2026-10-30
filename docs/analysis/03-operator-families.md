@@ -308,7 +308,9 @@ operator people reach for with sources that never complete:
 The first demo is `forkJoin([http$, subject$])` or `forkJoin([a$,
 interval(1000)])`: nothing is wrong with the operator, and no fairness
 assumption you can make about the source will fix it. The cure is in the
-pipeline, `take(1)` or `takeUntil` on the source that does not complete.
+pipeline, `take(1)` or `takeUntil` on the source that does not complete;
+`ForkJoinGuarded.tla` (part 05, section 11) checks which of those cures
+which hang, and what each costs.
 The second demo excludes errors from the property on purpose, so that the
 only counterexample left is the silent completion, which is what happens
 when one input is `EMPTY` or a stream whose every value was filtered out.

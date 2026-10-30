@@ -46,10 +46,10 @@ PATH. Both commands exit non-zero when any outcome differs from
 
 ## What is checked
 
-Forty-eight configurations. Twenty-six are expected to pass; twenty-two
+Fifty-four configurations. Twenty-nine are expected to pass; twenty-five
 are deliberate demonstrations of bugs, hangs or documented hazards and are
 expected to fail in a specific way. On 2026-10-30 both checkers agreed on
-all forty-eight, with identical state counts on every passing run.
+all fifty-four, with identical state counts on every passing run.
 
 | Config | Operator | Expected | States (generated / distinct) |
 |---|---|---|---|
@@ -101,6 +101,12 @@ all forty-eight, with identical state counts on every passing run.
 | `RetryThenCatch_reversed.cfg` | `source$.pipe(catchError(sel), retry(2))` | pass | 3 244 / 1 972 |
 | `RetryThenCatch_bug_reversedNoRetry.cfg` | `catchError` before `retry`: the fallback completes, the source is never retried | invariant violation | stops at first violation |
 | `RetryThenCatch_bug_reversedRepeats.cfg` | `catchError` before `retry`: the fallback runs on every source error | invariant violation | stops at first violation |
+| `ForkJoinGuarded_take1.cfg` | `forkJoin([a$, b$.pipe(take(1))])`, B never completes | pass | 175 / 89 |
+| `ForkJoinGuarded_none_chatty_demo.cfg` | no guard, B never completes: the hang | liveness violation | 765 / 377 |
+| `ForkJoinGuarded_take1_silent_demo.cfg` | `take(1)`, B never delivers: still a hang | liveness violation | 175 / 89 |
+| `ForkJoinGuarded_timer.cfg` | `forkJoin([a$, b$.pipe(takeUntil(timer(2)))])`, B silent | pass | 5 143 / 2 008 |
+| `ForkJoinGuarded_timer_empty_demo.cfg` | `takeUntil(timer)` completes an empty branch: no value | invariant violation | stops at first violation |
+| `ForkJoinGuarded_timerDefault.cfg` | `takeUntil(timer(2)), defaultIfEmpty(d)`: terminates, always a value | pass | 5 359 / 2 072 |
 
 ## Status and caveats
 

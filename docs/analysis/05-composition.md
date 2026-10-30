@@ -464,3 +464,78 @@ once.
 Both orders are small models, 180 and 1 972 distinct states, and part 03's
 remark about this family applies: the operators are cheap, the
 compositions are where the specification earns its keep.
+
+## 11. Curing the `forkJoin` hang, and what each cure costs
+
+`ForkJoin_silentB_demo` in part 03 is a hang that no change to `forkJoin`
+can fix, because it is a fact about a source. The fix is a guard on that
+source, and there are three common ones. `ForkJoinGuarded.tla` puts the
+guard between `b$` and `forkJoin` as a constant:
+
+```ts
+forkJoin([a$, b$])                                              // Guard = "none"
+forkJoin([a$, b$.pipe(take(1))])                                // Guard = "take1"
+forkJoin([a$, b$.pipe(takeUntil(timer(D)))])                    // Guard = "takeUntilTimer"
+forkJoin([a$, b$.pipe(takeUntil(timer(D)), defaultIfEmpty(d))]) // Guard = "takeUntilTimerDefault"
+```
+
+What is wrong with `b$` is a fairness assumption, so the module has three
+specifications that differ only in what `b$` is assumed to do, with the
+guard's own machinery (time, the timer) always fair:
+
+| Spec | `b$` is | RxJS example |
+|---|---|---|
+| `SpecSilentB` | never required to deliver or terminate | a `Subject` nobody calls |
+| `SpecChattyB` | required to keep delivering, never to complete | `interval`, a websocket |
+| `SpecFair` | well-behaved | an HTTP request |
+
+Checked against `<>Terminal(outDone)` (does `forkJoin` end?) and the
+invariant `BranchCompletesWithValue` (does the guard ever hand `forkJoin`
+an empty branch, which makes it complete without a value?):
+
+| Guard | silent `b$` | chatty `b$` | branch can end empty | value `forkJoin` gets from `b$` |
+|---|---|---|---|---|
+| none | hangs | hangs | only if `b$` completes empty itself | its last |
+| `take(1)` | hangs | ends | only if `b$` completes empty itself | its first |
+| `takeUntil(timer(D))` | ends | ends | yes, when the timer fires first | its last before `D`, or none |
+| `takeUntil(timer(D)), defaultIfEmpty(d)` | ends | ends | never | its last before `D`, or `d` |
+
+Each cell is one of the six configurations or follows from it. The two
+demonstrations are the two cells people discover in production:
+
+```
+ForkJoinGuarded_take1_silent_demo.cfg     (take(1), SpecSilentB)
+State 2: ANext(y)
+State 3: AComplete
+State 4: Stuttering        <- EventuallyTerminal violated: b$ never delivers, take(1) never fires
+```
+
+`take(1)` turns "must complete" into "must deliver once", which is a
+weaker assumption but still an assumption about a source you do not
+control. Against a `Subject` nobody calls, it hangs exactly as before.
+
+```
+ForkJoinGuarded_timer_empty_demo.cfg      (takeUntil(timer(2)), SpecSilentB)
+State 2: ANext(x)
+State 3: Tick
+State 4: Tick
+State 5: Fire              <- BranchCompletesWithValue violated: the branch completes empty
+```
+
+`takeUntil(timer(D))` makes the hang impossible, because its only
+assumption is that time passes, but it can complete the branch with
+nothing in it, and `forkJoin` then completes without a value. This is a
+silent outcome, not an error, so a UI waiting for the joined value shows
+nothing and reports nothing. `defaultIfEmpty` after the `takeUntil` is
+what turns it back into a value, and the fourth configuration checks that
+the branch then never completes empty on the guard's account.
+
+The invariant is worded carefully: a branch that completes empty because
+`b$` itself completed empty is not the guard's fault, and no guard can
+supply a value for a source that had none. The first version of this
+spec blamed `take(1)` for exactly that case, and the checker's trace, two
+steps long, was the correction.
+
+Everything here is `ForkJoin.tla` plus a layer for the guard (`bSeen`,
+`bBranchDone`, `bSub`) and the `Tick` machinery of part 04. The timer
+configurations have about 2 000 distinct states; the others under 400.
