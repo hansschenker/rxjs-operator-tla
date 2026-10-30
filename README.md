@@ -46,10 +46,10 @@ PATH. Both commands exit non-zero when any outcome differs from
 
 ## What is checked
 
-Forty configurations. Twenty-two are expected to pass; eighteen are
+Forty-four configurations. Twenty-four are expected to pass; twenty are
 deliberate demonstrations of bugs, hangs or documented hazards and are
 expected to fail in a specific way. On 2026-10-30 both checkers agreed on
-all forty, with identical state counts on every passing run.
+all forty-four, with identical state counts on every passing run.
 
 | Config | Operator | Expected | States (generated / distinct) |
 |---|---|---|---|
@@ -93,6 +93,10 @@ all forty, with identical state counts on every passing run.
 | `RetryOnShare_after.cfg` | `shared$.pipe(retry(2))` on one subscription | pass | 86 783 / 53 371 |
 | `RetryOnShare_after_demo.cfg` | retry after share leaves the other subscriptions unprotected | invariant violation | stops at first violation |
 | `RetryOnShare_noReset_demo.cfg` | retry after `share({resetOnError: false})` never re-executes the source | invariant violation | stops at first violation |
+| `CatchInSwitchMap_inside.cfg` | `switchMap(t => search(t).pipe(catchError(...)))` | pass | 21 297 / 12 014 |
+| `CatchInSwitchMap_outside.cfg` | `switchMap(search), catchError(...)` | pass | 1 515 / 926 |
+| `CatchInSwitchMap_bug_outsideStops.cfg` | `catchError` outside: the first failed search unsubscribes from the terms | invariant violation | stops at first violation |
+| `CatchInSwitchMap_bug_outsideCompletes.cfg` | `catchError` outside: the output completes while the terms are active | invariant violation | stops at first violation |
 
 ## Status and caveats
 

@@ -508,10 +508,10 @@ the next thing to write for this family:
   section 8). `retry` before `share` is one retry for everybody; `retry`
   after `share` protects only its own subscription, and does nothing at
   all if `share` was configured not to reset on error.
-- `catchError` inside `switchMap` against outside it: inside, an inner
-  error is replaced and the outer keeps running; outside, the first inner
-  error ends the whole pipeline. The invariant that separates them is
-  whether `outerDone` can still be `"active"` after an inner error.
+- `catchError` inside `switchMap` against outside it: done, as
+  `CatchInSwitchMap.tla` (part 05, section 9). Inside, a failed search is
+  replaced and the terms stay subscribed; outside, the first failed search
+  unsubscribes from the terms and the output ends with the fallback.
 - `retry(n), catchError(() => of(fallback))`: `n + 1` attempts, then a
   value and a completion, never an error. `NoSourceErrorDelivered` becomes
   an end-to-end property of the pair.

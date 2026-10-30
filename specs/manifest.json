@@ -38,5 +38,9 @@
   { "module": "RetryOnShare",  "cfg": "RetryOnShare_before.cfg",         "expect": "success",            "family": "composition", "note": "source$.pipe(retry(2), share()): one retry for everyone" },
   { "module": "RetryOnShare",  "cfg": "RetryOnShare_after.cfg",          "expect": "success",            "family": "composition", "note": "shared$.pipe(retry(2)) on one subscription: a retry per subscription" },
   { "module": "RetryOnShare",  "cfg": "RetryOnShare_after_demo.cfg",     "expect": "invariant-violation","family": "composition", "note": "demo: retry after share does not protect the other subscriptions" },
-  { "module": "RetryOnShare",  "cfg": "RetryOnShare_noReset_demo.cfg",   "expect": "invariant-violation","family": "composition", "note": "demo: retry after share({resetOnError: false}) exhausts without re-executing the source" }
+  { "module": "RetryOnShare",  "cfg": "RetryOnShare_noReset_demo.cfg",   "expect": "invariant-violation","family": "composition", "note": "demo: retry after share({resetOnError: false}) exhausts without re-executing the source" },
+  { "module": "CatchInSwitchMap", "cfg": "CatchInSwitchMap_inside.cfg",  "expect": "success",            "family": "composition", "note": "switchMap(t => search(t).pipe(catchError(...))): a failed search is replaced, the outer carries on" },
+  { "module": "CatchInSwitchMap", "cfg": "CatchInSwitchMap_outside.cfg", "expect": "success",            "family": "composition", "note": "switchMap(search), catchError(...): the first failed search ends the pipeline" },
+  { "module": "CatchInSwitchMap", "cfg": "CatchInSwitchMap_bug_outsideStops.cfg",     "expect": "invariant-violation", "family": "composition", "note": "bug demo: catchError outside switchMap unsubscribes from the terms on the first failed search" },
+  { "module": "CatchInSwitchMap", "cfg": "CatchInSwitchMap_bug_outsideCompletes.cfg", "expect": "invariant-violation", "family": "composition", "note": "bug demo: catchError outside switchMap completes the output while the terms are still active" }
 ]

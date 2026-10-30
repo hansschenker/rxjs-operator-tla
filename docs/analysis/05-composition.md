@@ -329,3 +329,75 @@ of which `Share.tla` covers on its own; adding them back is a matter of
 copying the actions. Each placement is checked with two subscriptions, two
 values, two values per execution and `Count = 2`, about 53 000 distinct
 states.
+
+## 9. `catchError` inside or outside a `switchMap`
+
+The third placement question is the one every live-search tutorial gets
+to eventually. `CatchInSwitchMap.tla` has terms, a `switchMap` that starts
+a search per term, searches that may error, and a `catchError` in one of
+two places:
+
+```ts
+// Placement = "inside": the failed search is replaced, the outer carries on
+terms$.pipe(switchMap(t => search(t).pipe(catchError(() => fallback$))))
+
+// Placement = "outside": the first failed search is an error for switchMap
+terms$.pipe(switchMap(t => search(t)), catchError(() => fallback$))
+```
+
+The module is `Flatten.tla` with the `switch` strategy and inner errors,
+plus `CatchError.tla`'s environment-controlled fallback. Inside, an inner
+that errors moves to a `"recovering"` state in which its fallback delivers
+values attributed to that search; it is still an inner, so a new term
+cancels it like any other. Outside, an inner error is `switchMap`'s error:
+it unsubscribes from the terms, and the outer `catchError` runs one
+fallback whose termination is the output's termination.
+
+What holds for both placements is `switchMap`'s own contract, with a
+recovering fallback counted as live: at most one live inner, only the
+newest, values grouped by search, and the subscriber's error only ever
+coming from a fallback. What separates them:
+
+| Property | inside | outside |
+|---|---|---|
+| every failed search is caught, and the terms stay subscribed (`OuterSurvivesInnerErrors`) | holds | fails |
+| the output does not complete while the terms are active (`NotCompleteWhileTermsActive`) | holds | fails |
+| at most one search ever errors (`AtMostOneInnerError`) | not applicable | holds |
+| the first failed search unsubscribes from the terms (`FirstErrorEndsSwitchMap`) | never | holds |
+| the fallback's termination is the output's (`OutputEndsWithFallback`) | not applicable | holds |
+
+The outside placement is checked as a correct description of what the
+code does, and the two demos are the same behaviour seen as the two
+symptoms users report:
+
+```
+CatchInSwitchMap_bug_outsideStops.cfg
+State 2: OuterNext        search 1 active
+State 3: InnerError(1)    subscribed = FALSE   fallback = "active"   <- OuterSurvivesInnerErrors violated
+```
+
+"The search box stops responding after one failed request": the terms are
+no longer subscribed, so later terms are never searched.
+
+```
+CatchInSwitchMap_bug_outsideCompletes.cfg
+State 2: OuterNext
+State 3: InnerError(1)
+State 4: OuterFallbackEnd("complete")   outDone = "complete"   outerDone = "active"   <- NotCompleteWhileTermsActive violated
+```
+
+"My stream completed and I never completed anything": the fallback
+completed, so `catchError`'s output completed, while the terms were still
+going.
+
+Two things the inside placement adds that are easy to miss. A new term
+cancels a running fallback, because the fallback is part of the inner;
+`NewestOnly` says so, and a slow fallback such as a retry-with-backoff
+inside a search is therefore cancelled by typing. And an error in the
+inside fallback is not caught by anything: `InnerFallbackError` tears the
+pipeline down, which is `CatchError.tla`'s fallback-error demo again, one
+level deeper.
+
+The inside placement is checked with three terms, two results per search
+and one fallback value, 12 014 distinct states; the outside placement,
+which ends early, has 926.

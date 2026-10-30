@@ -5,16 +5,16 @@ model checking an operator does and does not tell you about the real one.
 
 ## 1. What was verified
 
-All forty configurations in `specs/manifest.json` were run through both
-checkers on 2026-10-30:
+All forty-four configurations in `specs/manifest.json` were run through
+both checkers on 2026-10-30:
 
 - **TLC**, version 2026.10.28, the `tla2tools.jar` bundled with the VS Code
   TLA+ extension, on a Temurin 21 JRE.
 - **tla-ts** 0.0.3 from npm, a TypeScript reimplementation of TLC.
 
-Every outcome matched the manifest on both engines. On the twenty-two
+Every outcome matched the manifest on both engines. On the twenty-four
 passing configurations the two engines reported identical state counts. On
-the eighteen deliberately failing ones the counts differ for several
+the twenty deliberately failing ones the counts differ for several
 (`Flatten_bug_mergeForSwitch`: TLC 166 / 89, tla-ts 41 / 31;
 `Share_leak_demo`: TLC around 170 / 141, tla-ts 5 / 5; `Share_restart_demo`:
 TLC around 195 / 178, tla-ts 26 / 23), which is expected: a run stops at the
@@ -65,6 +65,10 @@ the counterexample were the same in every case.
 | `RetryOnShare_after.cfg` | pass | 86 783 / 53 371 | same |
 | `RetryOnShare_after_demo.cfg` | `SharedProtection` violated | varies by run | 13 / 12 |
 | `RetryOnShare_noReset_demo.cfg` | `RetriesReexecute` violated | varies by run | 83 / 77 |
+| `CatchInSwitchMap_inside.cfg` | pass | 21 297 / 12 014 | same |
+| `CatchInSwitchMap_outside.cfg` | pass | 1 515 / 926 | same |
+| `CatchInSwitchMap_bug_outsideStops.cfg` | `OuterSurvivesInnerErrors` violated | varies by run | 7 / 7 |
+| `CatchInSwitchMap_bug_outsideCompletes.cfg` | `NotCompleteWhileTermsActive` violated | varies by run | 20 / 18 |
 
 Every run except the three `Share` configurations finished in under a
 second. Those three, at up to 439 177 distinct states, took two to four
@@ -198,6 +202,8 @@ answer. They are the fastest way to learn what each guard is for.
 | `SaveStrategy = "exhaust"` | `SearchAndSave` | `NoDroppedSave` violated: a result arriving mid-save is dropped | `exhaustMap` for writes drops writes |
 | `SharedProtection` with `Placement = "after"` | `RetryOnShare` | violated in two steps: the subscription without a retry gets the first error | a `retry` after `share` protects only its own subscription |
 | `ResetOnError = FALSE` with `Placement = "after"` | `RetryOnShare` | `RetriesReexecute` violated: two retries used up, one execution | `share({resetOnError: false})` turns a downstream `retry` into an instant failure |
+| `OuterSurvivesInnerErrors` with `Placement = "outside"` | `CatchInSwitchMap` | violated in two steps: a term, a failed search, the terms unsubscribed | `catchError` after `switchMap` ends the search box on the first failure |
+| `NotCompleteWhileTermsActive` with `Placement = "outside"` | `CatchInSwitchMap` | violated in three steps: the fallback completes, so does the output | the same bug seen as an unexpected completion |
 | `WF_vars(Fire)` removed from `Spec` | `DebounceTime` | `PendingResolves` violated | a timer that is scheduled but never run |
 | `pending' = None` removed from `SourceError` | `DebounceTime` | `NothingPendingWhenDone` violated | state left behind after teardown |
 
@@ -262,7 +268,7 @@ tla-ts is young (version 0.0.3, a single maintainer) and a wrong "pass"
 from a model checker is the worst failure it can have. What this session
 established:
 
-- On these forty configurations, tla-ts and TLC agree on every outcome,
+- On these forty-four configurations, tla-ts and TLC agree on every outcome,
   every violated property, and every state count of a complete run,
   including the three `Share` models of several hundred thousand states.
 - It handled everything the specs use: `EXTENDS` of a local module, model
@@ -297,10 +303,10 @@ the two ever disagreeing.
 
 In order of expected payoff:
 
-1. **The other error-handling compositions**: `catchError` inside against
-   outside `switchMap`, and `retry` followed by `catchError` (part 03 lists
-   the property that separates each pair). `retry` on a shared source is
-   done: part 05, section 8.
+1. **`retry` followed by `catchError`**, the last error-handling
+   composition from part 03: `n + 1` attempts, then a value and a
+   completion, never an error. `retry` on a shared source and `catchError`
+   inside against outside `switchMap` are done: part 05, sections 8 and 9.
 2. **`forkJoin` with `take(1)` or `takeUntil`** on a never-completing
    source, the pipeline-level cure for the hang in `ForkJoin_silentB_demo`,
    checked as `EventuallyTerminal` under `SpecFairA`.
