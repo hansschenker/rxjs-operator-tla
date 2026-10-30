@@ -401,3 +401,66 @@ level deeper.
 The inside placement is checked with three terms, two results per search
 and one fallback value, 12 014 distinct states; the outside placement,
 which ends early, has 926.
+
+## 10. `retry` then `catchError`, and the reverse
+
+The last error-handling pair is the one whose order people get wrong by
+accident. `RetryThenCatch.tla` has a resubscribable source, a retry
+counter and an environment-controlled fallback, and an `Order` constant:
+
+```ts
+// Order = "retryFirst": the usual intent
+source$.pipe(retry(2), catchError(() => fallback$))
+
+// Order = "catchFirst": the common mistake
+source$.pipe(catchError(() => fallback$), retry(2))
+```
+
+In the first order, `retry` sees the source's errors and `catchError`
+sees only the one that escapes after the retries are used up. In the
+second, `catchError` is upstream of `retry`, so `retry` only ever sees
+errors that `catchError` lets through, which are the fallback's own.
+
+| Property | `retry` then `catchError` | `catchError` then `retry` |
+|---|---|---|
+| the source is retried after each of its first `Count` errors (`SourceIsRetriedAfterError`) | holds | fails |
+| the fallback runs at most once (`FallbackRunsAtMostOnce`) | holds | fails |
+| the fallback runs only after the retries are used up (`FallbackOnlyAfterExhaustion`) | holds | fails |
+| the fallback runs on every source error (`FallbackOnEveryError`) | fails | holds |
+| the source is retried only when the fallback errors (`RetryOnlyOnFallbackError`) | fails | holds |
+| the output is the source's values, then the fallback's (`OutIsSourceThenFallback`) | holds | fails: they interleave per attempt |
+| a source error never reaches the subscriber (`SourceErrorNeverDelivered`) | holds | holds |
+
+The last row is why the mistake goes unnoticed: in both orders the
+subscriber never sees the source's error, so a test that only checks for
+"no error" passes. The two demonstrations are the differences that tests
+miss:
+
+```
+RetryThenCatch_bug_reversedNoRetry.cfg
+State 2: SourceError        phase = "fallback"   attempts = 1   soFar = 0
+State 3: FallbackNext(d)    out = <<d>>
+State 4: FallbackComplete   outDone = "complete"                 <- FallbackCompletesOnlyAfterRetries violated
+```
+
+With `catchError` first and a fallback that completes, as `of(default)`
+does, the first error ends the stream with the default value. The
+`retry(2)` never ran, because nothing ever errored downstream of
+`catchError`.
+
+```
+RetryThenCatch_bug_reversedRepeats.cfg
+State 2: SourceError        fbRuns = 1
+State 3: FallbackError      attempts = 2   (retry resubscribes source$.pipe(catchError))
+State 4: SourceError        fbRuns = 2                            <- FallbackRunsAtMostOnce violated
+```
+
+With a fallback that rethrows, `retry` does resubscribe, but it
+resubscribes the whole upstream, so the fallback runs again on the next
+error. Anything the fallback does besides rethrowing, a toast, a log
+line, a default written somewhere, happens once per attempt instead of
+once.
+
+Both orders are small models, 180 and 1 972 distinct states, and part 03's
+remark about this family applies: the operators are cheap, the
+compositions are where the specification earns its keep.

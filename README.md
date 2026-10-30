@@ -46,10 +46,10 @@ PATH. Both commands exit non-zero when any outcome differs from
 
 ## What is checked
 
-Forty-four configurations. Twenty-four are expected to pass; twenty are
-deliberate demonstrations of bugs, hangs or documented hazards and are
+Forty-eight configurations. Twenty-six are expected to pass; twenty-two
+are deliberate demonstrations of bugs, hangs or documented hazards and are
 expected to fail in a specific way. On 2026-10-30 both checkers agreed on
-all forty-four, with identical state counts on every passing run.
+all forty-eight, with identical state counts on every passing run.
 
 | Config | Operator | Expected | States (generated / distinct) |
 |---|---|---|---|
@@ -97,6 +97,10 @@ all forty-four, with identical state counts on every passing run.
 | `CatchInSwitchMap_outside.cfg` | `switchMap(search), catchError(...)` | pass | 1 515 / 926 |
 | `CatchInSwitchMap_bug_outsideStops.cfg` | `catchError` outside: the first failed search unsubscribes from the terms | invariant violation | stops at first violation |
 | `CatchInSwitchMap_bug_outsideCompletes.cfg` | `catchError` outside: the output completes while the terms are active | invariant violation | stops at first violation |
+| `RetryThenCatch.cfg` | `source$.pipe(retry(2), catchError(sel))` | pass | 313 / 180 |
+| `RetryThenCatch_reversed.cfg` | `source$.pipe(catchError(sel), retry(2))` | pass | 3 244 / 1 972 |
+| `RetryThenCatch_bug_reversedNoRetry.cfg` | `catchError` before `retry`: the fallback completes, the source is never retried | invariant violation | stops at first violation |
+| `RetryThenCatch_bug_reversedRepeats.cfg` | `catchError` before `retry`: the fallback runs on every source error | invariant violation | stops at first violation |
 
 ## Status and caveats
 

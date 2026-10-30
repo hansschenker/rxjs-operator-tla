@@ -512,9 +512,10 @@ the next thing to write for this family:
   `CatchInSwitchMap.tla` (part 05, section 9). Inside, a failed search is
   replaced and the terms stay subscribed; outside, the first failed search
   unsubscribes from the terms and the output ends with the fallback.
-- `retry(n), catchError(() => of(fallback))`: `n + 1` attempts, then a
-  value and a completion, never an error. `NoSourceErrorDelivered` becomes
-  an end-to-end property of the pair.
+- `retry(n), catchError(() => of(fallback))`: done, as `RetryThenCatch.tla`
+  (part 05, section 10), together with the reversed order, where
+  `catchError` first means the source is never retried unless the
+  fallback errors, and the fallback runs on every error.
 
 `retryWhen` is `retry` with the resubscription decided by a notifier
 Observable rather than a count; `finalize(f)` is a side effect on any

@@ -5,16 +5,16 @@ model checking an operator does and does not tell you about the real one.
 
 ## 1. What was verified
 
-All forty-four configurations in `specs/manifest.json` were run through
+All forty-eight configurations in `specs/manifest.json` were run through
 both checkers on 2026-10-30:
 
 - **TLC**, version 2026.10.28, the `tla2tools.jar` bundled with the VS Code
   TLA+ extension, on a Temurin 21 JRE.
 - **tla-ts** 0.0.3 from npm, a TypeScript reimplementation of TLC.
 
-Every outcome matched the manifest on both engines. On the twenty-four
+Every outcome matched the manifest on both engines. On the twenty-six
 passing configurations the two engines reported identical state counts. On
-the twenty deliberately failing ones the counts differ for several
+the twenty-two deliberately failing ones the counts differ for several
 (`Flatten_bug_mergeForSwitch`: TLC 166 / 89, tla-ts 41 / 31;
 `Share_leak_demo`: TLC around 170 / 141, tla-ts 5 / 5; `Share_restart_demo`:
 TLC around 195 / 178, tla-ts 26 / 23), which is expected: a run stops at the
@@ -69,6 +69,10 @@ the counterexample were the same in every case.
 | `CatchInSwitchMap_outside.cfg` | pass | 1 515 / 926 | same |
 | `CatchInSwitchMap_bug_outsideStops.cfg` | `OuterSurvivesInnerErrors` violated | varies by run | 7 / 7 |
 | `CatchInSwitchMap_bug_outsideCompletes.cfg` | `NotCompleteWhileTermsActive` violated | varies by run | 20 / 18 |
+| `RetryThenCatch.cfg` | pass | 313 / 180 | same |
+| `RetryThenCatch_reversed.cfg` | pass | 3 244 / 1 972 | same |
+| `RetryThenCatch_bug_reversedNoRetry.cfg` | `FallbackCompletesOnlyAfterRetries` violated | varies by run | 16 / 15 |
+| `RetryThenCatch_bug_reversedRepeats.cfg` | `FallbackRunsAtMostOnce` violated | varies by run | 48 / 42 |
 
 Every run except the three `Share` configurations finished in under a
 second. Those three, at up to 439 177 distinct states, took two to four
@@ -204,6 +208,8 @@ answer. They are the fastest way to learn what each guard is for.
 | `ResetOnError = FALSE` with `Placement = "after"` | `RetryOnShare` | `RetriesReexecute` violated: two retries used up, one execution | `share({resetOnError: false})` turns a downstream `retry` into an instant failure |
 | `OuterSurvivesInnerErrors` with `Placement = "outside"` | `CatchInSwitchMap` | violated in two steps: a term, a failed search, the terms unsubscribed | `catchError` after `switchMap` ends the search box on the first failure |
 | `NotCompleteWhileTermsActive` with `Placement = "outside"` | `CatchInSwitchMap` | violated in three steps: the fallback completes, so does the output | the same bug seen as an unexpected completion |
+| `FallbackCompletesOnlyAfterRetries` with `Order = "catchFirst"` | `RetryThenCatch` | violated in three steps: one error, the fallback delivers and completes | `catchError` before `retry`: the source is never retried |
+| `FallbackRunsAtMostOnce` with `Order = "catchFirst"` | `RetryThenCatch` | violated: error, fallback errors, retry, error, fallback again | `catchError` before `retry`: the fallback's side effects repeat |
 | `WF_vars(Fire)` removed from `Spec` | `DebounceTime` | `PendingResolves` violated | a timer that is scheduled but never run |
 | `pending' = None` removed from `SourceError` | `DebounceTime` | `NothingPendingWhenDone` violated | state left behind after teardown |
 
@@ -268,7 +274,7 @@ tla-ts is young (version 0.0.3, a single maintainer) and a wrong "pass"
 from a model checker is the worst failure it can have. What this session
 established:
 
-- On these forty-four configurations, tla-ts and TLC agree on every outcome,
+- On these forty-eight configurations, tla-ts and TLC agree on every outcome,
   every violated property, and every state count of a complete run,
   including the three `Share` models of several hundred thousand states.
 - It handled everything the specs use: `EXTENDS` of a local module, model
@@ -303,19 +309,15 @@ the two ever disagreeing.
 
 In order of expected payoff:
 
-1. **`retry` followed by `catchError`**, the last error-handling
-   composition from part 03: `n + 1` attempts, then a value and a
-   completion, never an error. `retry` on a shared source and `catchError`
-   inside against outside `switchMap` are done: part 05, sections 8 and 9.
-2. **`forkJoin` with `take(1)` or `takeUntil`** on a never-completing
+1. **`forkJoin` with `take(1)` or `takeUntil`** on a never-completing
    source, the pipeline-level cure for the hang in `ForkJoin_silentB_demo`,
    checked as `EventuallyTerminal` under `SpecFairA`.
-3. **`SearchAndSave` with errors and a timed save**: a failing save
+2. **`SearchAndSave` with errors and a timed save**: a failing save
    (does `retry` on the inner keep the queue intact?) and a `Tick` so that
    the delay between a result and its acknowledgement is bounded.
-4. **`share` with a delayed reset**, `resetOnRefCountZero: () => timer(D)`,
+3. **`share` with a delayed reset**, `resetOnRefCountZero: () => timer(D)`,
    which combines `Share.tla` with the `Tick` machinery of part 04 and is
    where the subscribe-during-reset races live.
-5. **The conformance tests** of section 6, one per spec, so that the models
+4. **The conformance tests** of section 6, one per spec, so that the models
    are tied to RxJS 7's actual behaviour.
-6. **A trace-to-marble script** on top of tla-ts's `check()` output.
+5. **A trace-to-marble script** on top of tla-ts's `check()` output.

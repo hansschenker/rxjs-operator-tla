@@ -42,5 +42,9 @@
   { "module": "CatchInSwitchMap", "cfg": "CatchInSwitchMap_inside.cfg",  "expect": "success",            "family": "composition", "note": "switchMap(t => search(t).pipe(catchError(...))): a failed search is replaced, the outer carries on" },
   { "module": "CatchInSwitchMap", "cfg": "CatchInSwitchMap_outside.cfg", "expect": "success",            "family": "composition", "note": "switchMap(search), catchError(...): the first failed search ends the pipeline" },
   { "module": "CatchInSwitchMap", "cfg": "CatchInSwitchMap_bug_outsideStops.cfg",     "expect": "invariant-violation", "family": "composition", "note": "bug demo: catchError outside switchMap unsubscribes from the terms on the first failed search" },
-  { "module": "CatchInSwitchMap", "cfg": "CatchInSwitchMap_bug_outsideCompletes.cfg", "expect": "invariant-violation", "family": "composition", "note": "bug demo: catchError outside switchMap completes the output while the terms are still active" }
+  { "module": "CatchInSwitchMap", "cfg": "CatchInSwitchMap_bug_outsideCompletes.cfg", "expect": "invariant-violation", "family": "composition", "note": "bug demo: catchError outside switchMap completes the output while the terms are still active" },
+  { "module": "RetryThenCatch", "cfg": "RetryThenCatch.cfg",                    "expect": "success",            "family": "composition", "note": "source$.pipe(retry(2), catchError(sel)): three attempts, then the fallback once" },
+  { "module": "RetryThenCatch", "cfg": "RetryThenCatch_reversed.cfg",           "expect": "success",            "family": "composition", "note": "source$.pipe(catchError(sel), retry(2)): the fallback on every error, retry only on fallback errors" },
+  { "module": "RetryThenCatch", "cfg": "RetryThenCatch_bug_reversedNoRetry.cfg","expect": "invariant-violation","family": "composition", "note": "bug demo: catchError before retry: the fallback completes the stream, the source is never retried" },
+  { "module": "RetryThenCatch", "cfg": "RetryThenCatch_bug_reversedRepeats.cfg","expect": "invariant-violation","family": "composition", "note": "bug demo: catchError before retry: the fallback runs on every source error" }
 ]
