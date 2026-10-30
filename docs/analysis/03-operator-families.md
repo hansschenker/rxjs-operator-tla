@@ -425,9 +425,10 @@ Modelling choices worth knowing:
 
 - Each subscription id subscribes once. A subscriber that resubscribes is
   a second id, which keeps the state space finite and the traces readable.
-- Resets are immediate. RxJS also accepts a notifier Observable for a
-  delayed reset (`resetOnRefCountZero: () => timer(…)`); modelling that
-  needs the `Tick` machinery from part 04 and is the natural extension.
+- Resets are immediate here. RxJS also accepts a notifier Observable for
+  a delayed reset (`resetOnRefCountZero: () => timer(D)`), the grace
+  period; `ShareDelayed.tla` (part 05, section 13) adds it with the `Tick`
+  machinery from part 04.
 - `ReplaySubject`'s `windowTime` is not modelled; the buffer is bounded by
   count only.
 - A source that completes synchronously on connection is covered: it is

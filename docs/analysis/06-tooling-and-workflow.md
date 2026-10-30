@@ -5,16 +5,16 @@ model checking an operator does and does not tell you about the real one.
 
 ## 1. What was verified
 
-All fifty-nine configurations in `specs/manifest.json` were run through
+All sixty-three configurations in `specs/manifest.json` were run through
 both checkers on 2026-10-30:
 
 - **TLC**, version 2026.10.28, the `tla2tools.jar` bundled with the VS Code
   TLA+ extension, on a Temurin 21 JRE.
 - **tla-ts** 0.0.3 from npm, a TypeScript reimplementation of TLC.
 
-Every outcome matched the manifest on both engines. On the thirty-one
+Every outcome matched the manifest on both engines. On the thirty-three
 passing configurations the two engines reported identical state counts. On
-the twenty-eight deliberately failing ones the counts differ for several
+the thirty deliberately failing ones the counts differ for several
 (`Flatten_bug_mergeForSwitch`: TLC 166 / 89, tla-ts 41 / 31;
 `Share_leak_demo`: TLC around 170 / 141, tla-ts 5 / 5; `Share_restart_demo`:
 TLC around 195 / 178, tla-ts 26 / 23), which is expected: a run stops at the
@@ -84,6 +84,10 @@ the counterexample were the same in every case.
 | `SearchAndSaveTimed_bug_propagate.cfg` | `QueueSurvivesRetries` violated | varies by run | 36 / 27 |
 | `SearchAndSaveTimed_bug_catchSkips.cfg` | `EveryResultAcked` violated | varies by run | 269 / 153 |
 | `SearchAndSaveTimed_bug_latency.cfg` | `AckLatencyBoundedNoRetry` violated | varies by run | 1 851 / 838 |
+| `ShareDelayed.cfg` | pass | 119 721 / 40 859 | same |
+| `ShareDelayed_replay.cfg` | pass | 117 393 / 40 067 | same |
+| `ShareDelayed_bug_lostValues.cfg` | action property `NoValueUnobserved` violated | varies by run | 41 / 35 |
+| `ShareDelayed_race_demo.cfg` | action property `JoinAtDeadlineKeepsConnection` violated | varies by run | 2 079 / 1 350 |
 
 Every run except the three `Share` configurations finished in under a
 second. Those three, at up to 439 177 distinct states, took two to four
@@ -119,9 +123,9 @@ Or open the `.tla` file in VS Code with the TLA+ extension and run "Check
 model with TLC". TLC writes `*_TTrace_*.tla` helper modules next to the spec
 after a violation; `.gitignore` excludes them and the script deletes them.
 
-tla-ts mirrors TLC's exit codes: 0 on success, 12 for a safety violation
-(an invariant or action property), 13 for a liveness violation. Both were
-observed in this session.
+tla-ts mirrors TLC's exit codes: 0 on success, 12 for an invariant
+violation, 13 for a liveness violation, and also 13 for a violated action
+property. All three were observed in this session.
 
 ## 3. Reading the three kinds of counterexample
 
@@ -226,6 +230,8 @@ answer. They are the fastest way to learn what each guard is for.
 | `SaveFailure = "propagate"` | `SearchAndSaveTimed` | `QueueSurvivesRetries` violated: the first failed save cancels the queue | an unhandled error in a `concatMap` inner ends the pipeline and loses the queued writes |
 | `SaveFailure = "catchInner"` | `SearchAndSaveTimed` | `EveryResultAcked` violated: the pipeline completes with a write missing | `catchError(() => EMPTY)` on a write drops it silently |
 | `AckLatencyBoundedNoRetry` with `SaveFailure = "retryInner"` | `SearchAndSaveTimed` | violated: a retried save is acknowledged at frame 3, bound 2 | retries add to the latency of everything queued behind them |
+| `NoValueUnobserved` with `BufferSize = 0` | `ShareDelayed` | violated: subscribe, unsubscribe, a value with nobody on | a grace period with a plain Subject keeps the connection, not the values |
+| `JoinAtDeadlineKeepsConnection` | `ShareDelayed` | violated: the reset fires, then a subscription arrives in the same frame and reconnects | the grace period's boundary frame is a race |
 | `WF_vars(Fire)` removed from `Spec` | `DebounceTime` | `PendingResolves` violated | a timer that is scheduled but never run |
 | `pending' = None` removed from `SourceError` | `DebounceTime` | `NothingPendingWhenDone` violated | state left behind after teardown |
 
@@ -290,7 +296,12 @@ tla-ts is young (version 0.0.3, a single maintainer) and a wrong "pass"
 from a model checker is the worst failure it can have. What this session
 established:
 
-- On these fifty-nine configurations, tla-ts and TLC agree on every outcome,
+- One naming difference: a violated action property, `[][A]_vars`, is
+  reported by TLC as "Action property X is violated" and by the tla-ts
+  `check()` API as status `liveness-violation` (its CLI prints TLC's
+  wording and exits with 13). `scripts/check.mjs` accepts either for a
+  manifest entry expecting `property-violation`.
+- On these sixty-three configurations, tla-ts and TLC agree on every outcome,
   every violated property, and every state count of a complete run,
   including the three `Share` models of several hundred thousand states.
 - It handled everything the specs use: `EXTENDS` of a local module, model
@@ -325,12 +336,12 @@ the two ever disagreeing.
 
 In order of expected payoff:
 
-1. **`share` with a delayed reset**, `resetOnRefCountZero: () => timer(D)`,
-   which combines `Share.tla` with the `Tick` machinery of part 04 and is
-   where the subscribe-during-reset races live.
-2. **The conformance tests** of section 6, one per spec, so that the models
-   are tied to RxJS 7's actual behaviour.
-3. **A trace-to-marble script** on top of tla-ts's `check()` output.
+1. **The conformance tests** of section 6, one per spec, so that the models
+   are tied to RxJS 7's actual behaviour. With every operator and
+   composition on the original list now specified, this is the item that
+   turns the collection from a model of RxJS into a checked one.
+2. **A trace-to-marble script** on top of tla-ts's `check()` output.
 
-The guarded `forkJoin` and the timed, failing saves from earlier versions
-of this list are done: part 05, sections 11 and 12.
+The guarded `forkJoin`, the timed failing saves and `share` with a
+delayed reset from earlier versions of this list are done: part 05,
+sections 11 to 13.

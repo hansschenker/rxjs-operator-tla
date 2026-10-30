@@ -57,5 +57,9 @@
   { "module": "SearchAndSaveTimed", "cfg": "SearchAndSaveTimed_catch.cfg",       "expect": "success",            "family": "composition", "note": "timed saves with catchError(() => EMPTY) on the inner: a failed save is skipped" },
   { "module": "SearchAndSaveTimed", "cfg": "SearchAndSaveTimed_bug_propagate.cfg","expect": "invariant-violation","family": "composition", "note": "bug demo: no handling on the inner save: the first failure errors the pipeline and cancels the queue" },
   { "module": "SearchAndSaveTimed", "cfg": "SearchAndSaveTimed_bug_catchSkips.cfg","expect": "invariant-violation","family": "composition", "note": "demo: catchError(() => EMPTY) on the inner save completes with writes silently missing" },
-  { "module": "SearchAndSaveTimed", "cfg": "SearchAndSaveTimed_bug_latency.cfg", "expect": "invariant-violation","family": "composition", "note": "demo: the latency bound that forgets retries fails: a retried save delays everything behind it" }
+  { "module": "SearchAndSaveTimed", "cfg": "SearchAndSaveTimed_bug_latency.cfg", "expect": "invariant-violation","family": "composition", "note": "demo: the latency bound that forgets retries fails: a retried save delays everything behind it" },
+  { "module": "ShareDelayed",  "cfg": "ShareDelayed.cfg",                      "expect": "success",            "family": "multicasting","note": "share({resetOnRefCountZero: () => timer(2)}): a two-frame grace period" },
+  { "module": "ShareDelayed",  "cfg": "ShareDelayed_replay.cfg",               "expect": "success",            "family": "multicasting","note": "share with a ReplaySubject(1) connector and a two-frame grace period: a cache" },
+  { "module": "ShareDelayed",  "cfg": "ShareDelayed_bug_lostValues.cfg",       "expect": "property-violation", "family": "multicasting","note": "demo: with a plain Subject, values delivered during the grace period reach nobody" },
+  { "module": "ShareDelayed",  "cfg": "ShareDelayed_race_demo.cfg",            "expect": "property-violation", "family": "multicasting","note": "demo: at the deadline frame the reset may fire before a new subscription, which then re-executes the source" }
 ]

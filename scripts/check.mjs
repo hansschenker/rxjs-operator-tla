@@ -137,7 +137,10 @@ for (const entry of entries) {
   } catch (err) {
     r = { status: "error", states: "?", message: err.message };
   }
-  const ok = r.status === entry.expect;
+  // TLC reports a violated [][A]_v as an action property; the tla-ts API
+  // reports it as a liveness violation. Either satisfies "property-violation".
+  const ok = r.status === entry.expect
+    || (entry.expect === "property-violation" && r.status === "liveness-violation");
   if (!ok) mismatches++;
   const detail = r.violated ? ` (${r.violated})` : r.message ? ` ${r.message}` : "";
   console.log(`${pad(ok ? "ok" : "FAIL", 5)}${pad(entry.cfg, 44)}${pad(r.status + detail, 58)}${pad(entry.expect, 22)}${r.states}`);

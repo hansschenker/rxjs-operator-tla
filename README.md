@@ -46,10 +46,10 @@ PATH. Both commands exit non-zero when any outcome differs from
 
 ## What is checked
 
-Fifty-nine configurations. Thirty-one are expected to pass; twenty-eight
-are deliberate demonstrations of bugs, hangs or documented hazards and are
+Sixty-three configurations. Thirty-three are expected to pass; thirty are
+deliberate demonstrations of bugs, hangs or documented hazards and are
 expected to fail in a specific way. On 2026-10-30 both checkers agreed on
-all fifty-nine, with identical state counts on every passing run.
+all sixty-three, with identical state counts on every passing run.
 
 | Config | Operator | Expected | States (generated / distinct) |
 |---|---|---|---|
@@ -112,6 +112,10 @@ all fifty-nine, with identical state counts on every passing run.
 | `SearchAndSaveTimed_bug_propagate.cfg` | no handling: the first failed save errors the pipeline and cancels the queue | invariant violation | stops at first violation |
 | `SearchAndSaveTimed_bug_catchSkips.cfg` | `catchError(() => EMPTY)` completes with writes silently missing | invariant violation | stops at first violation |
 | `SearchAndSaveTimed_bug_latency.cfg` | a latency bound that forgets the retries | invariant violation | stops at first violation |
+| `ShareDelayed.cfg` | `share({resetOnRefCountZero: () => timer(2)})` | pass | 119 721 / 40 859 |
+| `ShareDelayed_replay.cfg` | the same with a `ReplaySubject(1)` connector: a cache with a grace period | pass | 117 393 / 40 067 |
+| `ShareDelayed_bug_lostValues.cfg` | a plain Subject: values during the grace period reach nobody | action-property violation | stops at first violation |
+| `ShareDelayed_race_demo.cfg` | at the deadline frame the reset may win and the source is re-executed | action-property violation | stops at first violation |
 
 ## Status and caveats
 

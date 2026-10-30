@@ -635,3 +635,83 @@ configuration has 51 562 distinct states and the `catchError` one
 rather than by guarding the actions, so late saves are simply cut off,
 which the latency invariant tolerates because it speaks only of saves
 that were acknowledged.
+
+## 13. `share` with a grace period
+
+`Share.tla` in part 03 showed the two ends of `resetOnRefCountZero`:
+`true` tears the connection down the moment the last subscription leaves,
+so every rejoin re-executes the source, and `false` never tears it down,
+which is the `shareReplay` leak. RxJS 7 also accepts a notifier, and the
+usual one is a timer:
+
+```ts
+share({ resetOnRefCountZero: () => timer(D) })
+share({ connector: () => new ReplaySubject(1), resetOnRefCountZero: () => timer(D) })
+```
+
+When the last subscription leaves, the reset is scheduled `D` frames out.
+A subscription arriving before then cancels it and joins the running
+connection; if none arrives, the connection is torn down. This is the
+grace period that keeps a websocket or a cached request alive across a
+route change. `ShareDelayed.tla` is `Share.tla` plus the `Tick` machinery
+of part 04, with `ResetDelay = 0` as the default `share()`.
+
+The property that the delay buys is the deadline form of "an unobserved
+connection is eventually torn down":
+
+```tla
+Grace        == subject = "live" /\ RefCount = 0
+GraceBounded == Grace => (now <= resetAt /\ resetAt <= now + ResetDelay)
+```
+
+The source never runs unobserved for more than `ResetDelay` frames.
+Together with `JoinKeepsConnection` (joining a live connection never
+re-executes the source) and `OneExecutionPerTeardown` (every connection
+after the first was preceded by a reset or a terminal), that is the
+middle ground: bounded unobserved execution instead of none or unbounded.
+Both configurations, a plain Subject and a `ReplaySubject(1)`, pass all of
+`Share.tla`'s multicast invariants as well.
+
+Two demonstrations, both action properties, the first ones in this
+repository to be used as demos:
+
+```
+ShareDelayed_bug_lostValues.cfg       (plain Subject)
+State 2: Subscribe(s1)
+State 3: Unsubscribe(s1)    Grace: reset due at 2
+State 4: SourceNext(a)      RefCount = 0                 <- NoValueUnobserved violated
+```
+
+During the grace period the connection is kept, but a plain Subject has
+nobody to deliver to, so the values of those frames are lost. With the
+`ReplaySubject` connector they are buffered, and `ReplayCoversBuffer`
+says the next subscription to join receives them. Which of the two is
+wanted depends on whether the stream is a feed or a cache; the spec makes
+the difference a one-constant choice.
+
+```
+ShareDelayed_race_demo.cfg
+State 2: Subscribe(s1)
+State 3: Unsubscribe(s1)    reset due at 2
+State 4: Tick               now = 1
+State 5: Tick               now = 2
+State 6: ResetFire          subject = "none"
+State 7: Subscribe(s2)      connections = 2              <- JoinAtDeadlineKeepsConnection violated
+```
+
+A subscription that arrives in the very frame the reset is due keeps the
+connection if it comes first and re-executes the source if the reset
+fires first. The marble test for this scenario runs one of the two orders;
+TLC runs both, and the property "rejoining within `D` frames keeps the
+connection" is true only with `D` read as strictly less. The invariants of
+the passing configurations hold in both orders, which is the point: the
+race changes the cost, not the correctness.
+
+Two bounds mattered here. A pending reset scheduled past the horizon is
+still pending, so the marker for "none pending" has to lie beyond any
+frame a reset can be scheduled for; the first version collided with it
+and TLC reported a type violation within a second. And a third
+subscription multiplies the state space sixty-fold without adding a
+scenario the second does not already produce, so the configurations use
+two subscriptions and a five-frame horizon, about 40 000 distinct states
+each.
