@@ -46,10 +46,10 @@ PATH. Both commands exit non-zero when any outcome differs from
 
 ## What is checked
 
-Nineteen configurations. Thirteen are expected to pass; six are deliberate
-demonstrations of bugs, hangs or documented hazards and are expected to fail
-in a specific way. On 2026-10-30 both checkers agreed on all nineteen, with
-identical state counts on every passing run.
+Twenty-five configurations. Seventeen are expected to pass; eight are
+deliberate demonstrations of bugs, hangs or documented hazards and are
+expected to fail in a specific way. On 2026-10-30 both checkers agreed on
+all twenty-five, with identical state counts on every passing run.
 
 | Config | Operator | Expected | States (generated / distinct) |
 |---|---|---|---|
@@ -72,6 +72,12 @@ identical state counts on every passing run.
 | `Share_replayRefCount.cfg` | `shareReplay({bufferSize: 1, refCount: true})` | pass | 288 884 / 161 967 |
 | `Share_leak_demo.cfg` | `shareReplay(1)` keeps the source running with no subscribers | invariant violation | stops at first violation |
 | `Share_restart_demo.cfg` | `share()` re-executes the source after a reset | invariant violation | stops at first violation |
+| `Retry.cfg` | `retry(2)` | pass | 535 / 275 |
+| `Retry_resetOnSuccess.cfg` | `retry({count: 1, resetOnSuccess: true})` | pass | 581 / 301 |
+| `Retry_delay.cfg` | `retry({count: 2, delay: 2})` | pass | 4 625 / 2 245 |
+| `Retry_partial_demo.cfg` | `retry(2)` delivers values of failed attempts | invariant violation | stops at first violation |
+| `CatchError.cfg` | `catchError(selector)`, any fallback | pass | 345 / 210 |
+| `CatchError_fallbackError_demo.cfg` | `catchError` does not catch the fallback's error | invariant violation | stops at first violation |
 
 ## Status and caveats
 

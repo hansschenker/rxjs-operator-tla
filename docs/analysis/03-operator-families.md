@@ -14,7 +14,7 @@ checked specification in `specs/` or a sketch marked as such.
 | Flattening | `switchMap`, `mergeMap`, `concatMap`, `exhaustMap` | one record per inner | `InnerNext`, `InnerComplete`, `InnerError` | interleaving, cancellation, ordering | `Flatten.tla` |
 | Combining | `combineLatest`, `zip`, `withLatestFrom`, `merge`, `concat`, `forkJoin`, `race` | a second source | the second source's actions | synchronisation, liveness | `CombineLatest.tla` |
 | Multicasting | `share`, `shareReplay`, `connect` | one stream per subscription, a shared subject, a replay buffer | subscribe, unsubscribe per subscription | refCount, multicast, replay | `Share.tla` |
-| Error handling | `catchError`, `retry`, `retryWhen`, `finalize` | an attempt count | resubscribe | bounded attempts, teardown | sketch only |
+| Error handling | `retry`, `catchError`, `retryWhen`, `finalize` | an attempt counter, a resubscribable source, a fallback stream | resubscribe, switch to the fallback | values concatenated, bounded attempts, which errors reach the subscriber | `Retry.tla`, `CatchError.tla` |
 
 ## Pointwise operators: the invariant is the operator
 
@@ -376,28 +376,95 @@ Modelling choices worth knowing:
 - A source that completes synchronously on connection is covered: it is
   the trace where `SourceEnd` follows `Subscribe` immediately.
 
-## Error handling: resubscription (sketch)
+## Error handling: resubscription and recovery
 
-`retry(n)` resubscribes to the source after an error, up to `n` times. The
-source must therefore be modelled as something that can be subscribed to
-repeatedly:
+`retry` and `catchError` both react to the source's error by subscribing
+to something else: `retry` to the same source again, `catchError` to
+whatever its selector returns. The modelling step they share is a source
+that can be subscribed more than once, so a single `in`/`inDone` pair is
+not enough: `Retry.tla` keeps the current attempt's values in `in` and the
+values of all attempts in `all`; `CatchError.tla` keeps the source and the
+fallback as two streams and a `phase` that says which one is subscribed.
 
-```tla
-VARIABLES attempt,                \* 0..n
-          in, inDone,             \* the current attempt's stream
-          out, outDone
-Resubscribe == /\ inDone = "error" /\ attempt < n
-               /\ attempt' = attempt + 1 /\ in' = <<>> /\ inDone' = "active"
-               /\ UNCHANGED <<out, outDone>>
+**`Retry.tla`** covers `retry(n)`, `retry({count, resetOnSuccess})` and
+`retry({count, delay})` through three constants. Its counter follows the
+RxJS 7 implementation, which increments on every error and retries while
+the old value was below `Count`, so `retry(n)` subscribes at most `n + 1`
+times. The `delay` form reuses the `Tick` machinery of part 04: an error
+puts the operator into a `"waiting"` state with a `resumeAt` frame, and a
+`Resubscribe` action fires when the frame arrives.
+
+| Invariant | Says |
+|---|---|
+| `ValuesConcatenated` (`out = all`) | the subscriber gets every value of every attempt, in order; nothing is hidden or replayed |
+| `ErrorOnlyWhenExhausted` | the error is delivered only once `Count` retries have been used |
+| `CounterTracksAttempts` | without `resetOnSuccess`, the counter is exactly the number of failed attempts |
+| `SuccessResetsCounter` | with `resetOnSuccess`, any value in the current attempt clears it |
+| `AttemptsBounded` | attempts never exceed `Count + 1` plus the number of values that could have reset the counter |
+| `WaitingIsBounded`, `ImmediateWithoutDelay` | the gap between attempts is at most `Delay` frames, and absent when `Delay = 0` |
+| `NoDeliveryWhileWaiting` (action) | between attempts the subscriber hears nothing |
+| `WaitingEndsInResubscription` (liveness) | a delayed retry always happens, given fairness on `Tick` and `Resubscribe` only |
+
+The demonstration `Retry_partial_demo.cfg` checks `retry(2)` against
+"nothing was delivered when the final error arrives" and fails in four
+steps:
+
+```
+State 2: SourceNext(a)   out = <<a>>   attempt = 1
+State 3: SourceError     attempt = 2   soFar = 1      (retried, subscriber told nothing)
+State 4: SourceError     attempt = 3   soFar = 2
+State 5: SourceError     outDone = "error"            <- NoPartialResults violated: out = <<a>>
 ```
 
-Invariants: `attempt <= n`; `outDone = "error" => attempt = n`; values from
-all attempts are concatenated in `out` (a `retry` does not undo delivered
-values, which is the surprising part for newcomers). `catchError(f)` is
-`SourceEnd("error")` followed by switching `in` to the fallback Observable,
-which is the flattening machinery with one inner. `finalize(f)` is a
-side-effect on any terminal or unsubscribe step and has no observable
-property beyond "runs exactly once", an action property on a counter.
+That is the fact newcomers find surprising: `retry` does not roll back. A
+UI that renders values as they arrive shows the partial result of a failed
+attempt, then the error. `ValuesConcatenated` states the same thing
+positively.
+
+**`CatchError.tla`** models the selector's result as a second source that
+the environment controls, so one model covers `EMPTY`, `of(d)`,
+`throwError(...)` and a selector that throws. The one selector it does not
+cover is `catchError((e, caught) => caught)`, which resubscribes the source
+and is therefore `retry(Infinity)`, bounded in `Retry.tla` by `MaxTotal`.
+
+| Invariant | Says |
+|---|---|
+| `OutIsSourceThenFallback` (`out = in \o fb`) | the subscriber sees the source's values, then the fallback's |
+| `NoSourceErrorDelivered` | an error can only come from the fallback |
+| `FallbackOnlyAfterError`, `FallbackSilentBeforeError` | the fallback runs after the source has errored, never alongside it |
+| `CompleteFromRunningStream` | completion comes from whichever stream was subscribed |
+| `ErrorIsSwallowed` (action) | the step in which the source errors delivers nothing downstream |
+| `NoReturnToSource` (action) | the selector runs at most once |
+
+The demonstration `CatchError_fallbackError_demo.cfg` checks "the result
+never errors" and fails in two steps: the source errors, then the fallback
+errors. `catchError` is not a `try`/`catch` around the pipeline; it
+replaces one stream with another, and the replacement can fail too. The
+usual fix, `catchError(() => of(fallback))`, is the trace where the fallback
+delivers and completes, which the passing configuration also covers.
+
+Both operators cost little to check (a few hundred states; the delayed
+retry 2 245). Their state spaces are small for the same reason as the
+pointwise family: the only independent event is the source's next
+notification. Where they earn a specification is in composition, which is
+the next thing to write for this family:
+
+- `retry` on a shared source: `share()` resets on error, so a retry
+  resubscribes the shared connection and every other subscriber sees the
+  new attempt. `Share.tla` with `ResetOnError = TRUE` already shows the
+  reconnection; a combined model would show who receives what.
+- `catchError` inside `switchMap` against outside it: inside, an inner
+  error is replaced and the outer keeps running; outside, the first inner
+  error ends the whole pipeline. The invariant that separates them is
+  whether `outerDone` can still be `"active"` after an inner error.
+- `retry(n), catchError(() => of(fallback))`: `n + 1` attempts, then a
+  value and a completion, never an error. `NoSourceErrorDelivered` becomes
+  an end-to-end property of the pair.
+
+`retryWhen` is `retry` with the resubscription decided by a notifier
+Observable rather than a count; `finalize(f)` is a side effect on any
+terminal or unsubscribe step and has no observable property beyond "runs
+exactly once", an action property on a counter.
 
 ## Choosing what to specify
 

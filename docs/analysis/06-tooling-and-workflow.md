@@ -5,16 +5,16 @@ model checking an operator does and does not tell you about the real one.
 
 ## 1. What was verified
 
-All nineteen configurations in `specs/manifest.json` were run through both
-checkers on 2026-10-30:
+All twenty-five configurations in `specs/manifest.json` were run through
+both checkers on 2026-10-30:
 
 - **TLC**, version 2026.10.28, the `tla2tools.jar` bundled with the VS Code
   TLA+ extension, on a Temurin 21 JRE.
 - **tla-ts** 0.0.3 from npm, a TypeScript reimplementation of TLC.
 
-Every outcome matched the manifest on both engines. On the thirteen passing
-configurations the two engines reported identical state counts. On the
-six deliberately failing ones the counts differ for three
+Every outcome matched the manifest on both engines. On the seventeen
+passing configurations the two engines reported identical state counts. On
+the eight deliberately failing ones the counts differ for several
 (`Flatten_bug_mergeForSwitch`: TLC 166 / 89, tla-ts 41 / 31;
 `Share_leak_demo`: TLC around 170 / 141, tla-ts 5 / 5; `Share_restart_demo`:
 TLC around 195 / 178, tla-ts 26 / 23), which is expected: a run stops at the
@@ -44,6 +44,12 @@ the counterexample were the same in every case.
 | `Share_replayRefCount.cfg` | pass | 288 884 / 161 967 | same |
 | `Share_leak_demo.cfg` | `SourceStopsWhenUnused` violated | varies by run | 5 / 5 |
 | `Share_restart_demo.cfg` | `SingleExecution` violated | varies by run | 26 / 23 |
+| `Retry.cfg` | pass | 535 / 275 | same |
+| `Retry_resetOnSuccess.cfg` | pass | 581 / 301 | same |
+| `Retry_delay.cfg` | pass | 4 625 / 2 245 | same |
+| `Retry_partial_demo.cfg` | `NoPartialResults` violated | varies by run | 108 / 77 |
+| `CatchError.cfg` | pass | 345 / 210 | same |
+| `CatchError_fallbackError_demo.cfg` | `NeverErrors` violated | varies by run | 17 / 16 |
 
 Every run except the three `Share` configurations finished in under a
 second. Those three, at up to 439 177 distinct states, took two to four
@@ -165,6 +171,8 @@ answer. They are the fastest way to learn what each guard is for.
 | `SpecFairA` | `CombineLatest` | `EventuallyTerminal` violated, stuttering | a `combineLatest` that hangs on a silent source |
 | `ResetOnRefCountZero = FALSE` (the `shareReplay` default) | `Share` | `SourceStopsWhenUnused` violated after the last unsubscribe | the `shareReplay` leak: the source keeps running with no subscribers |
 | `SingleExecution` checked against `share()` | `Share` | violated by subscribe, unsubscribe, subscribe | `share()` re-executes the source after a reset |
+| `NoPartialResults` checked against `retry(2)` | `Retry` | violated: a value, then three errors | `retry` does not roll back values of failed attempts |
+| `NeverErrors` checked against `catchError` | `CatchError` | violated: source errors, fallback errors | `catchError` does not catch the fallback's error |
 | `WF_vars(Fire)` removed from `Spec` | `DebounceTime` | `PendingResolves` violated | a timer that is scheduled but never run |
 | `pending' = None` removed from `SourceError` | `DebounceTime` | `NothingPendingWhenDone` violated | state left behind after teardown |
 
@@ -229,7 +237,7 @@ tla-ts is young (version 0.0.3, a single maintainer) and a wrong "pass"
 from a model checker is the worst failure it can have. What this session
 established:
 
-- On these nineteen configurations, tla-ts and TLC agree on every outcome,
+- On these twenty-five configurations, tla-ts and TLC agree on every outcome,
   every violated property, and every state count of a complete run,
   including the three `Share` models of several hundred thousand states.
 - It handled everything the specs use: `EXTENDS` of a local module, model
@@ -264,11 +272,13 @@ the two ever disagreeing.
 
 In order of expected payoff:
 
-1. **`retry` / `catchError`** with a resubscribable source.
-2. **`zip` and `forkJoin`**, the remaining combining operators with
+1. **`zip` and `forkJoin`**, the remaining combining operators with
    liveness hazards.
-3. **A two-boundary pipeline**, `switchMap` into `concatMap`, to check the
+2. **A two-boundary pipeline**, `switchMap` into `concatMap`, to check the
    cross-stage property "a cancelled search never causes a save".
+3. **Error handling in composition**: `retry` on a shared source,
+   `catchError` inside against outside `switchMap`, and `retry` followed by
+   `catchError` (part 03 lists the property that separates each pair).
 4. **`share` with a delayed reset**, `resetOnRefCountZero: () => timer(D)`,
    which combines `Share.tla` with the `Tick` machinery of part 04 and is
    where the subscribe-during-reset races live.

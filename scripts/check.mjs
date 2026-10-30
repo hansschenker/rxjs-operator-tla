@@ -127,7 +127,7 @@ function runTlc(entry) {
 
 const pad = (s, n) => String(s ?? "").padEnd(n);
 console.log(`engine: ${engine}\n`);
-console.log(`${pad("", 5)}${pad("config", 32)}${pad("result", 46)}${pad("expected", 22)}${"generated/distinct"}`);
+console.log(`${pad("", 5)}${pad("config", 36)}${pad("result", 46)}${pad("expected", 22)}${"generated/distinct"}`);
 
 let mismatches = 0;
 for (const entry of entries) {
@@ -140,7 +140,7 @@ for (const entry of entries) {
   const ok = r.status === entry.expect;
   if (!ok) mismatches++;
   const detail = r.violated ? ` (${r.violated})` : r.message ? ` ${r.message}` : "";
-  console.log(`${pad(ok ? "ok" : "FAIL", 5)}${pad(entry.cfg, 32)}${pad(r.status + detail, 46)}${pad(entry.expect, 22)}${r.states}`);
+  console.log(`${pad(ok ? "ok" : "FAIL", 5)}${pad(entry.cfg, 36)}${pad(r.status + detail, 46)}${pad(entry.expect, 22)}${r.states}`);
   if (showTrace && r.trace) {
     console.log(typeof r.trace === "string" ? r.trace : JSON.stringify(r.trace, null, 1));
     console.log();

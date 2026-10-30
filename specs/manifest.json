@@ -17,5 +17,11 @@
   { "module": "Share",         "cfg": "Share_replay.cfg",               "expect": "success",            "family": "multicasting","note": "shareReplay(1)" },
   { "module": "Share",         "cfg": "Share_replayRefCount.cfg",       "expect": "success",            "family": "multicasting","note": "shareReplay({bufferSize: 1, refCount: true})" },
   { "module": "Share",         "cfg": "Share_leak_demo.cfg",            "expect": "invariant-violation","family": "multicasting","note": "demo: shareReplay keeps the source running after the last subscription leaves" },
-  { "module": "Share",         "cfg": "Share_restart_demo.cfg",         "expect": "invariant-violation","family": "multicasting","note": "demo: share() re-executes the source for a subscription after a reset" }
+  { "module": "Share",         "cfg": "Share_restart_demo.cfg",         "expect": "invariant-violation","family": "multicasting","note": "demo: share() re-executes the source for a subscription after a reset" },
+  { "module": "Retry",         "cfg": "Retry.cfg",                      "expect": "success",            "family": "error-handling","note": "retry(2)" },
+  { "module": "Retry",         "cfg": "Retry_resetOnSuccess.cfg",       "expect": "success",            "family": "error-handling","note": "retry({count: 1, resetOnSuccess: true})" },
+  { "module": "Retry",         "cfg": "Retry_delay.cfg",                "expect": "success",            "family": "error-handling","note": "retry({count: 2, delay: 2})" },
+  { "module": "Retry",         "cfg": "Retry_partial_demo.cfg",         "expect": "invariant-violation","family": "error-handling","note": "demo: values of failed attempts reach the subscriber before the final error" },
+  { "module": "CatchError",    "cfg": "CatchError.cfg",                 "expect": "success",            "family": "error-handling","note": "catchError(selector), any fallback" },
+  { "module": "CatchError",    "cfg": "CatchError_fallbackError_demo.cfg","expect": "invariant-violation","family": "error-handling","note": "demo: an error in the fallback is not caught" }
 ]
