@@ -20,6 +20,7 @@ first one that breaks a property, as a trace that reads like a marble diagram.
 | [`specs/`](specs/) | Runnable TLA+ modules, one per operator family, with TLC configs and a manifest of expected outcomes |
 | [`scripts/check.mjs`](scripts/check.mjs) | Runs every manifest entry through tla-ts or TLC and compares with the expected result |
 | [`tests/`](tests/) | Conformance tests: property-based tests that run the real RxJS 7 operators under `TestScheduler` and assert the specs' invariants on the result |
+| [`scripts/trace-to-marble.mjs`](scripts/trace-to-marble.mjs) | Draws a TLC counterexample as marble diagrams, with a `TestScheduler` skeleton |
 | `docs/Claude-RxJS and TLA+ verification-*.md` | The exported conversation this project grew out of |
 
 ## The analysis
@@ -38,6 +39,7 @@ npm install
 npm run check          # tla-ts: pure Node, no Java needed
 npm run check:tlc      # the official TLC: needs Java 11+ and tla2tools.jar
 npm run check:trace    # tla-ts, and print the counterexample traces
+npm run trace -- Flatten_bug_mergeForSwitch.cfg   # a counterexample as marble diagrams
 npm test               # conformance tests against the real RxJS operators
 npm run verify         # check, typecheck and test
 ```
@@ -123,5 +125,5 @@ all sixty-three, with identical state counts on every passing run.
 ## Status and caveats
 
 - Every spec in `specs/` was model-checked with both TLC (version 2026.10.28) and tla-ts 0.0.3. Nothing in the analysis is a hand-checked claim about those specs.
-- The specs describe the operators as documented and as implemented in RxJS 7. They are models; `tests/` closes the gap for the single operators and three of the compositions with property-based conformance tests against RxJS 7.8.2 (18 properties, 200 random source behaviours each, all passing on 2026-10-30). Part 06, section 6, describes the harness and what it found.
+- The specs describe the operators as documented and as implemented in RxJS 7. They are models; `tests/` closes the gap with property-based conformance tests against RxJS 7.8.2 for every spec, single operators and compositions alike (33 properties in 17 files, 200 random source behaviours each, all passing on 2026-10-30). Part 06, section 6, describes the harness and what it found.
 - Model bounds are small on purpose (two or three values, streams of length four or five, a few frames of time). Part 06 explains why that is enough for design bugs and where it is not.

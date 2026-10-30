@@ -192,8 +192,15 @@ That is a `TestScheduler` test which fails against the broken operator and
 passes against the fixed one. For non-timed specs the same works with each
 step as one frame.
 
-tla-ts returns the trace as a JavaScript object from its `check()` API, so
-this translation can be a script rather than a manual step.
+tla-ts returns the trace as a JavaScript object from its `check()` API, and
+`scripts/trace-to-marble.mjs` (`npm run trace -- <config>`) does the
+translation: it runs a manifest entry, takes the counterexample, and
+prints the steps with their frames, one marble line per stream (frame =
+`now` when the spec has time, one frame per step otherwise, terminals as
+`|` and `#`), subscription lines for the share specs (`^` join, `!`
+leave), the exact frame-stamped events, and a `cold(...)` skeleton for a
+`TestScheduler` test. For the mergeMap-as-switchMap demo it prints
+`out ---ab` with `a = [2,1], b = [1,1]`, which is the stale result drawn.
 
 ## 5. Exercises: break a guard, read the trace
 
@@ -267,15 +274,18 @@ These tests exist, in `tests/`, run with `npm test`. The harness
 (`tests/harness.ts`) generates random source behaviours within a spec's
 bounds, builds them as cold observables scheduled on `TestScheduler`'s
 virtual clock, records every notification with its frame, and exposes
-each source's subscription log. Eighteen properties, 200 behaviours each,
-cover `take`, the pointwise family, `debounceTime`, `cancelAfter`, the
-four flattening strategies, `combineLatest`, `zip`, `forkJoin`, `share`
-and `shareReplay`, `retry` with its options, `catchError`, `filter` then
-`take`, and `switchMap` then `concatMap`. Where a spec's run is
-deterministic for a given event order (`retry`, `catchError`, the three
-combining operators), the test runs the spec's `Next` relation as a
-reference in TypeScript and compares the whole recording; elsewhere it
-asserts the invariants directly. All pass against RxJS 7.8.2.
+each source's subscription log. Thirty-three properties in seventeen
+files, 200 behaviours each, cover every spec: the single operators, and
+the compositions of part 05 (`filter` then `take`, `switchMap` then
+`concatMap` with and without timed failing saves, `retry` on `share`,
+`catchError` inside and outside `switchMap`, `retry` then `catchError`
+in both orders, the guarded `forkJoin`, and `share` with a delayed
+reset). Where a spec's run is deterministic for a given event order
+(`retry`, `catchError`, the combining operators, `retry` then
+`catchError`, the guarded `forkJoin`), the test runs the spec's `Next`
+relation as a reference in TypeScript and compares the whole recording;
+elsewhere it asserts the invariants directly. All pass against RxJS
+7.8.2.
 
 Three things the conformance run taught, none of them a mismatch between a
 spec and the operator, all of them about the scheduler:
@@ -367,12 +377,13 @@ the two ever disagreeing.
 
 In order of expected payoff:
 
-1. **Conformance tests for the remaining compositions**: `RetryOnShare`,
-   `CatchInSwitchMap`, `RetryThenCatch`, `ForkJoinGuarded`,
-   `SearchAndSaveTimed` and `ShareDelayed`. The harness and the pattern
-   are in `tests/`; each is an afternoon.
-2. **A trace-to-marble script** on top of tla-ts's `check()` output.
+1. **Larger bounds on a few specs** where the horizon was chosen for
+   runtime (`SearchAndSaveTimed`, `ShareDelayed`), run occasionally rather
+   than on every check.
+2. **Turning the trace script's skeleton into a complete test**: it
+   prints the `cold(...)` lines; wiring the operator under test and the
+   expected output in is still by hand.
 
-The guarded `forkJoin`, the timed failing saves, `share` with a delayed
-reset and the first round of conformance tests from earlier versions of
-this list are done: part 05, sections 11 to 13, and section 6 above.
+Everything else from earlier versions of this list is done: the
+compositions in part 05, sections 7 to 13, the conformance tests in
+section 6, and the trace-to-marble script in section 4.

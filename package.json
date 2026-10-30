@@ -9,6 +9,7 @@
     "check:trace": "node scripts/check.mjs --trace",
     "check:tlc": "node scripts/check.mjs --engine tlc",
     "check:both": "node scripts/check.mjs && node scripts/check.mjs --engine tlc",
+    "trace": "node scripts/trace-to-marble.mjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
     "verify": "npm run check && npm run typecheck && npm test"
