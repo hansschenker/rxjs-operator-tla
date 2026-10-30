@@ -46,10 +46,10 @@ PATH. Both commands exit non-zero when any outcome differs from
 
 ## What is checked
 
-Thirty-one configurations. Nineteen are expected to pass; twelve are
+Thirty-six configurations. Twenty are expected to pass; sixteen are
 deliberate demonstrations of bugs, hangs or documented hazards and are
 expected to fail in a specific way. On 2026-10-30 both checkers agreed on
-all thirty-one, with identical state counts on every passing run.
+all thirty-six, with identical state counts on every passing run.
 
 | Config | Operator | Expected | States (generated / distinct) |
 |---|---|---|---|
@@ -84,6 +84,11 @@ all thirty-one, with identical state counts on every passing run.
 | `ForkJoin.cfg` | `forkJoin(a$, b$)` | pass | 3 677 / 1 769 |
 | `ForkJoin_silentB_demo.cfg` | a source never completes | liveness violation | 3 677 / 1 769 |
 | `ForkJoin_emptySource_demo.cfg` | a source completes without a value | liveness violation | 3 677 / 1 769 |
+| `SearchAndSave.cfg` | `terms$.pipe(switchMap(search), concatMap(save))` | pass | 1 551 / 740 |
+| `SearchAndSave_bug_mergeSearch.cfg` | `mergeMap` for the searches saves a stale result last | invariant violation | stops at first violation |
+| `SearchAndSave_bug_switchSave.cfg` | `switchMap` for the saves cancels a write in flight | invariant violation | stops at first violation |
+| `SearchAndSave_bug_mergeSave.cfg` | `mergeMap` for the saves lets writes overlap | invariant violation | stops at first violation |
+| `SearchAndSave_bug_exhaustSave.cfg` | `exhaustMap` for the saves drops a result | invariant violation | stops at first violation |
 
 ## Status and caveats
 

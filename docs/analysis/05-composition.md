@@ -169,3 +169,89 @@ operator module has to export:
 With these, the per-operator specs in this repository become a library and
 the pipeline spec is generated. The operator catalogue in part 03 is the
 list of what still has to be written.
+
+## 7. A two-boundary pipeline, checked
+
+`SearchAndSave.tla` is the pipeline from section 3 with two asynchronous
+boundaries:
+
+```ts
+terms$.pipe(switchMap(term => search(term)), concatMap(result => save(result)))
+```
+
+Each term starts a search that delivers `ResultsPerSearch` results and
+completes; each result starts a save that delivers one acknowledgement and
+completes; the subscriber receives the acknowledgements. Both stages take
+their flattening strategy from a constant, so the same module checks the
+intended pair and shows what every other choice breaks.
+
+The composition rules of sections 2 and 3 are visible in the actions.
+`SearchNext(k)` is one step in which a search delivers a result,
+`switchMap` forwards it into `mid`, and `concatMap` starts a save for it:
+the synchronous part of the chain fuses. Searches completing
+(`SearchComplete`) and saves finishing (`SaveDone`) are separate actions,
+and TLC interleaves them with each other and with new terms. The two
+strategies live in two functions, `Start(f, strategy, rec)` and
+`Finish(f, strategy, i)`, shared by both stages.
+
+The properties come in three groups, and the third is the one no single
+operator spec can state:
+
+| Group | Invariants |
+|---|---|
+| stage 1 (`switchMap`) | at most one search in flight, and it is the newest; results of an older search never follow results of a newer one |
+| stage 2 (`concatMap`) | saves run one at a time, in order; none is cancelled or dropped |
+| across the boundary | one save per result; acknowledgements are a prefix of the results; `NoStaleSave`, the search ids in the acknowledgements never decrease; `EveryResultSaved`, on completion the acknowledgements equal the results |
+
+Four demonstrations each change one strategy and check one invariant.
+The first is the live-search bug from part 03 followed through to its
+consequence two stages later:
+
+```
+SearchStrategy = "merge"
+State 2: TermNext          search 1 active
+State 3: TermNext          search 2 active (search 1 is not cancelled)
+State 4: SearchNext(2)     mid = <<<<2,1>>>>            save <<2,1>> active
+State 5: SearchNext(1)     mid = <<<<2,1>>, <<1,1>>>>   save <<1,1>> pending
+State 6: SaveDone(1)       out = <<<<2,1>>>>
+State 7: SaveDone(2)       out = <<<<2,1>>, <<1,1>>>>   <- NoStaleSave violated
+```
+
+The stale result of the first search is saved after, and therefore over,
+the result of the second. The second demonstration is the one that
+matters most in practice, `switchMap` used for the writes:
+
+```
+SaveStrategy = "switch"
+State 4: SearchNext(2)     save <<2,1>> active
+State 5: TermsComplete
+State 6: SearchNext(2)     save <<2,1>> cancelled, save <<2,2>> active   <- NoLostSave violated
+```
+
+A write in flight is cancelled by the next result and never completes. The
+remaining two show `mergeMap` letting two writes overlap and `exhaustMap`
+dropping a result that arrives during a write.
+
+To see the whole design space, every strategy pair was run against the
+five save-side invariants with TLC (eighty runs):
+
+| search \ save | `switch` | `merge` | `concat` | `exhaust` |
+|---|---|---|---|---|
+| `switch` | lost writes | overlapping, stale | **all hold** | dropped |
+| `merge` | lost, stale | overlapping, stale | stale | dropped, stale |
+| `concat` | lost writes | overlapping, stale | all hold | dropped |
+| `exhaust` | lost writes | overlapping, stale | all hold | dropped |
+
+Reading the columns: the save strategy alone decides whether writes are
+lost (`switch`), overlap (`merge`) or are dropped (`exhaust`), and only
+`concat` saves everything. Reading the rows: `merge` for the searches is
+the only search strategy that produces stale saves, because it is the only
+one that lets an older search deliver after a newer one has. `concat` and
+`exhaust` for the searches also satisfy every save-side property, but they
+are not a live search: part 03's matrix shows that they queue or drop
+search terms, which is a stage-1 property this table does not show.
+
+What the model leaves out, and what the next version would add: errors
+(a failing save, and whether `retry` on the inner keeps the queue intact),
+and a `Tick` so that the time between a result and its acknowledgement is
+bounded. Both are additions to the actions; the properties stay.

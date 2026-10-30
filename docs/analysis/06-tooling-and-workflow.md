@@ -5,16 +5,16 @@ model checking an operator does and does not tell you about the real one.
 
 ## 1. What was verified
 
-All thirty-one configurations in `specs/manifest.json` were run through
+All thirty-six configurations in `specs/manifest.json` were run through
 both checkers on 2026-10-30:
 
 - **TLC**, version 2026.10.28, the `tla2tools.jar` bundled with the VS Code
   TLA+ extension, on a Temurin 21 JRE.
 - **tla-ts** 0.0.3 from npm, a TypeScript reimplementation of TLC.
 
-Every outcome matched the manifest on both engines. On the nineteen
+Every outcome matched the manifest on both engines. On the twenty
 passing configurations the two engines reported identical state counts. On
-the twelve deliberately failing ones the counts differ for several
+the sixteen deliberately failing ones the counts differ for several
 (`Flatten_bug_mergeForSwitch`: TLC 166 / 89, tla-ts 41 / 31;
 `Share_leak_demo`: TLC around 170 / 141, tla-ts 5 / 5; `Share_restart_demo`:
 TLC around 195 / 178, tla-ts 26 / 23), which is expected: a run stops at the
@@ -56,6 +56,11 @@ the counterexample were the same in every case.
 | `ForkJoin.cfg` | pass | 3 677 / 1 769 | same |
 | `ForkJoin_silentB_demo.cfg` | `EventuallyTerminal` violated | 3 677 / 1 769 | same |
 | `ForkJoin_emptySource_demo.cfg` | `EventuallyEmitsOrErrors` violated | 3 677 / 1 769 | same |
+| `SearchAndSave.cfg` | pass | 1 551 / 740 | same |
+| `SearchAndSave_bug_mergeSearch.cfg` | `NoStaleSave` violated | varies by run | 99 / 54 |
+| `SearchAndSave_bug_switchSave.cfg` | `NoLostSave` violated | varies by run | 13 / 11 |
+| `SearchAndSave_bug_mergeSave.cfg` | `SavesSerialised` violated | varies by run | 13 / 11 |
+| `SearchAndSave_bug_exhaustSave.cfg` | `NoDroppedSave` violated | varies by run | 13 / 11 |
 
 Every run except the three `Share` configurations finished in under a
 second. Those three, at up to 439 177 distinct states, took two to four
@@ -183,6 +188,10 @@ answer. They are the fastest way to learn what each guard is for.
 | `combineLatest`'s `LatestPair` checked against `zip` | `Zip` | violated: `<<x, x>>` after `a` delivered `x`, `y` | `zip` pairs by position, `combineLatest` by recency |
 | `SpecFairA` | `ForkJoin` | `EventuallyTerminal` violated, stuttering | `forkJoin` hangs on a source that never completes |
 | `EventuallyEmitsOrErrors` under `SpecFair` | `ForkJoin` | violated: a source completes empty in step one | `forkJoin` completes silently if any source is empty |
+| `SearchStrategy = "merge"` | `SearchAndSave` | `NoStaleSave` violated: result of search 1 saved after a result of search 2 | `mergeMap` where `switchMap` was meant, now with the consequence two stages later |
+| `SaveStrategy = "switch"` | `SearchAndSave` | `NoLostSave` violated: the second result cancels the first save | `switchMap` for writes loses writes |
+| `SaveStrategy = "merge"` | `SearchAndSave` | `SavesSerialised` violated: two saves in flight | `mergeMap` for writes lets them overlap |
+| `SaveStrategy = "exhaust"` | `SearchAndSave` | `NoDroppedSave` violated: a result arriving mid-save is dropped | `exhaustMap` for writes drops writes |
 | `WF_vars(Fire)` removed from `Spec` | `DebounceTime` | `PendingResolves` violated | a timer that is scheduled but never run |
 | `pending' = None` removed from `SourceError` | `DebounceTime` | `NothingPendingWhenDone` violated | state left behind after teardown |
 
@@ -247,7 +256,7 @@ tla-ts is young (version 0.0.3, a single maintainer) and a wrong "pass"
 from a model checker is the worst failure it can have. What this session
 established:
 
-- On these thirty-one configurations, tla-ts and TLC agree on every outcome,
+- On these thirty-six configurations, tla-ts and TLC agree on every outcome,
   every violated property, and every state count of a complete run,
   including the three `Share` models of several hundred thousand states.
 - It handled everything the specs use: `EXTENDS` of a local module, model
@@ -282,14 +291,15 @@ the two ever disagreeing.
 
 In order of expected payoff:
 
-1. **A two-boundary pipeline**, `switchMap` into `concatMap`, to check the
-   cross-stage property "a cancelled search never causes a save".
-2. **Error handling in composition**: `retry` on a shared source,
+1. **Error handling in composition**: `retry` on a shared source,
    `catchError` inside against outside `switchMap`, and `retry` followed by
    `catchError` (part 03 lists the property that separates each pair).
-3. **`forkJoin` with `take(1)` or `takeUntil`** on a never-completing
+2. **`forkJoin` with `take(1)` or `takeUntil`** on a never-completing
    source, the pipeline-level cure for the hang in `ForkJoin_silentB_demo`,
    checked as `EventuallyTerminal` under `SpecFairA`.
+3. **`SearchAndSave` with errors and a timed save**: a failing save
+   (does `retry` on the inner keep the queue intact?) and a `Tick` so that
+   the delay between a result and its acknowledgement is bounded.
 4. **`share` with a delayed reset**, `resetOnRefCountZero: () => timer(D)`,
    which combines `Share.tla` with the `Tick` machinery of part 04 and is
    where the subscribe-during-reset races live.
