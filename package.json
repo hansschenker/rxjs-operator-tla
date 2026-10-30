@@ -1,0 +1,19 @@
+{
+  "name": "rxjs-operator-tla",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RxJS operator behaviour described in TLA+ and checked with the TLC and tla-ts model checkers",
+  "type": "module",
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "check:trace": "node scripts/check.mjs --trace",
+    "check:tlc": "node scripts/check.mjs --engine tlc",
+    "check:both": "node scripts/check.mjs && node scripts/check.mjs --engine tlc"
+  },
+  "devDependencies": {
+    "tla-ts": "0.0.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

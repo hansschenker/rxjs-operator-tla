@@ -1,0 +1,16 @@
+[
+  { "module": "Take",          "cfg": "Take.cfg",                       "expect": "success",            "family": "truncating",  "note": "take(N)" },
+  { "module": "Pointwise",     "cfg": "Pointwise.cfg",                  "expect": "success",            "family": "pointwise",   "note": "map, filter, scan, distinctUntilChanged" },
+  { "module": "Flatten",       "cfg": "Flatten_switch.cfg",             "expect": "success",            "family": "flattening",  "note": "switchMap" },
+  { "module": "Flatten",       "cfg": "Flatten_merge.cfg",              "expect": "success",            "family": "flattening",  "note": "mergeMap" },
+  { "module": "Flatten",       "cfg": "Flatten_concat.cfg",             "expect": "success",            "family": "flattening",  "note": "concatMap" },
+  { "module": "Flatten",       "cfg": "Flatten_exhaust.cfg",            "expect": "success",            "family": "flattening",  "note": "exhaustMap" },
+  { "module": "Flatten",       "cfg": "Flatten_bug_mergeForSwitch.cfg", "expect": "invariant-violation","family": "flattening",  "note": "bug demo: mergeMap where switchMap was intended" },
+  { "module": "Flatten",       "cfg": "Flatten_stall_concat.cfg",       "expect": "liveness-violation", "family": "flattening",  "note": "liveness demo: concatMap stalls behind an inner that never completes" },
+  { "module": "DebounceTime",  "cfg": "DebounceTime.cfg",               "expect": "success",            "family": "timing",      "note": "debounceTime(D)" },
+  { "module": "CancelAfter",   "cfg": "CancelAfter.cfg",                "expect": "success",            "family": "timing",      "note": "custom cancelAfter(D) = takeUntil(timer(D))" },
+  { "module": "Pipeline",      "cfg": "Pipeline.cfg",                   "expect": "success",            "family": "composition", "note": "source.pipe(filter(P), take(N))" },
+  { "module": "CombineLatest", "cfg": "CombineLatest.cfg",              "expect": "success",            "family": "combining",   "note": "combineLatest([a$, b$])" },
+  { "module": "CombineLatest", "cfg": "CombineLatest_SilentB.cfg",      "expect": "liveness-violation", "family": "combining",   "note": "liveness demo: hangs when source B is not fair" },
+  { "module": "CombineLatest", "cfg": "CombineLatest_EmptySource.cfg",  "expect": "liveness-violation", "family": "combining",   "note": "liveness demo: never emits if a source terminates before the pair forms" }
+]
