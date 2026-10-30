@@ -12,7 +12,7 @@ checked specification in `specs/` or a sketch marked as such.
 | Truncating | `take`, `first`, `takeWhile`, `takeUntil`, `skip`, `takeLast`, `last` | a count | none, but ends the stream | prefix relations, `~subscribed` when done | `Take.tla` |
 | Timing | `debounceTime`, `throttleTime`, `delay`, `timeout`, `auditTime`, custom `cancelAfter` | `now`, deadlines, a pending value | `Tick`, `Fire` | quiet windows, deadlines as invariants | `DebounceTime.tla`, `CancelAfter.tla` |
 | Flattening | `switchMap`, `mergeMap`, `concatMap`, `exhaustMap` | one record per inner | `InnerNext`, `InnerComplete`, `InnerError` | interleaving, cancellation, ordering | `Flatten.tla` |
-| Combining | `combineLatest`, `zip`, `withLatestFrom`, `merge`, `concat`, `forkJoin`, `race` | a second source | the second source's actions | synchronisation, liveness | `CombineLatest.tla` |
+| Combining | `combineLatest`, `zip`, `forkJoin`, `withLatestFrom`, `merge`, `concat`, `race` | a second source, buffers for `zip` | the second source's actions | pairing rule, completion rule, liveness | `CombineLatest.tla`, `Zip.tla`, `ForkJoin.tla` |
 | Multicasting | `share`, `shareReplay`, `connect` | one stream per subscription, a shared subject, a replay buffer | subscribe, unsubscribe per subscription | refCount, multicast, replay | `Share.tla` |
 | Error handling | `retry`, `catchError`, `retryWhen`, `finalize` | an attempt counter, a resubscribable source, a fallback stream | resubscribe, switch to the fallback | values concatenated, bounded attempts, which errors reach the subscriber | `Retry.tla`, `CatchError.tla` |
 
@@ -256,13 +256,68 @@ enforce. The third row says that even fair sources do not guarantee an
 emission, because a source may end before the pair forms. Both are facts a
 developer discovers in production, and here they are three-line configs.
 
+**`Zip.tla`** pairs by position where `combineLatest` pairs by recency.
+RxJS 7 keeps a buffer per source, and so does the spec; the invariants
+check that the buffered implementation equals the one-line definition:
+
+```tla
+PairsByIndex               == out = [k \in 1..Len(out) |-> <<a[k], b[k]>>]
+AllPossiblePairsDelivered  == Len(out) = Min(Len(a), Len(b))
+BuffersAreUnpairedSuffixes == bufA = SubSeq(a, Len(out) + 1, Len(a)) /\ bufB = SubSeq(b, Len(out) + 1, Len(b))
+OneSideWaits               == bufA = <<>> \/ bufB = <<>>
+CompletesWhenNoMorePairs   == outDone = "complete" <=> (aDone = "complete" /\ bufA = <<>>) \/ (bDone = "complete" /\ bufB = <<>>)
+```
+
+`OneSideWaits` is the fact that makes the buffers tractable: as soon as
+both hold a value, a pair goes out in the same step, so one buffer is
+always empty. `CompletesWhenNoMorePairs` is the completion rule that
+surprises people: `zip` completes when a *completed* source has nothing
+left to pair, which can leave buffered values of the other source
+undelivered.
+
+Two demonstrations:
+
+| Config | Checks | Counterexample | Lesson |
+|---|---|---|---|
+| `Zip_buffer_demo.cfg` | `Len(bufA) <= 1` | `a` delivers twice while `b` is silent | `zip` buffers without bound; a fast source against a slow one is a memory leak |
+| `Zip_notLatest_demo.cfg` | `combineLatest`'s `LatestPair` | `a` delivers `x` then `y`; `b` delivers `x`; the output is `<<x, x>>` | `zip` pairs `b`'s first value with `a`'s *first*, not its latest |
+
+The second one is the difference between the two operators as a
+three-step trace, which is a better explanation than any prose.
+
+**`ForkJoin.tla`** delivers nothing until both sources have completed,
+then the pair of their last values, then completes. Its invariants are
+short because its behaviour is:
+
+```tla
+NothingBeforeAllComplete == out /= <<>> => (aDone = "complete" /\ bDone = "complete")
+AtMostOneEmission        == Len(out) <= 1
+EmitsLastValues          == out /= <<>> => out = <<<<Last(a), Last(b)>>>>
+EmptySourceMeansSilence  == ((Terminal(aDone) /\ a = <<>>) \/ (Terminal(bDone) /\ b = <<>>)) => out = <<>>
+```
+
+The family's liveness story is sharpest here, because `forkJoin` is the
+operator people reach for with sources that never complete:
+
+| Config | Spec | Property | Counterexample |
+|---|---|---|---|
+| `ForkJoin.cfg` | `SpecFair` | `<>Terminal(outDone)` | holds |
+| `ForkJoin_silentB_demo.cfg` | `SpecFairA` | `<>Terminal(outDone)` | A completes; B keeps delivering, never completes; the result never emits |
+| `ForkJoin_emptySource_demo.cfg` | `SpecFair` | `<>(out /= <<>> \/ outDone = "error")` | A completes with no value in the very first step; the result completes silently |
+
+The first demo is `forkJoin([http$, subject$])` or `forkJoin([a$,
+interval(1000)])`: nothing is wrong with the operator, and no fairness
+assumption you can make about the source will fix it. The cure is in the
+pipeline, `take(1)` or `takeUntil` on the source that does not complete.
+The second demo excludes errors from the property on purpose, so that the
+only counterexample left is the silent completion, which is what happens
+when one input is `EMPTY` or a stream whose every value was filtered out.
+
 Sketches for the rest of the family:
 
 | Operator | Emits when | Completes when | Liveness hazard |
 |---|---|---|---|
-| `zip` | both have an unpaired value; outputs `<<a[k], b[k]>>` | either completes and its buffer cannot be paired again | a fast source's buffer grows without bound: `Len(a) - Len(b)` is unbounded, a model-bound violation |
 | `withLatestFrom(b$)` | `a` delivers and `b /= <<>>` | `a` completes | silent until `b` has delivered |
-| `forkJoin` | never, until all complete; then `<<Last(a), Last(b)>>` once | all complete | hangs on any source that never completes; emits nothing if any source completed empty |
 | `merge` | either delivers | both complete | none |
 | `concat` | `a` delivers, or `b` delivers after `aDone = "complete"` | `b` completes | `b` never starts if `a` never completes |
 | `race` | the first source to deliver wins; the other is unsubscribed | the winner completes | none |

@@ -23,5 +23,11 @@
   { "module": "Retry",         "cfg": "Retry_delay.cfg",                "expect": "success",            "family": "error-handling","note": "retry({count: 2, delay: 2})" },
   { "module": "Retry",         "cfg": "Retry_partial_demo.cfg",         "expect": "invariant-violation","family": "error-handling","note": "demo: values of failed attempts reach the subscriber before the final error" },
   { "module": "CatchError",    "cfg": "CatchError.cfg",                 "expect": "success",            "family": "error-handling","note": "catchError(selector), any fallback" },
-  { "module": "CatchError",    "cfg": "CatchError_fallbackError_demo.cfg","expect": "invariant-violation","family": "error-handling","note": "demo: an error in the fallback is not caught" }
+  { "module": "CatchError",    "cfg": "CatchError_fallbackError_demo.cfg","expect": "invariant-violation","family": "error-handling","note": "demo: an error in the fallback is not caught" },
+  { "module": "Zip",           "cfg": "Zip.cfg",                        "expect": "success",            "family": "combining",   "note": "zip(a$, b$)" },
+  { "module": "Zip",           "cfg": "Zip_buffer_demo.cfg",            "expect": "invariant-violation","family": "combining",   "note": "demo: zip buffers without bound" },
+  { "module": "Zip",           "cfg": "Zip_notLatest_demo.cfg",         "expect": "invariant-violation","family": "combining",   "note": "demo: zip pairs by position, not recency (combineLatest's invariant fails)" },
+  { "module": "ForkJoin",      "cfg": "ForkJoin.cfg",                   "expect": "success",            "family": "combining",   "note": "forkJoin(a$, b$)" },
+  { "module": "ForkJoin",      "cfg": "ForkJoin_silentB_demo.cfg",      "expect": "liveness-violation", "family": "combining",   "note": "liveness demo: hangs when a source never completes" },
+  { "module": "ForkJoin",      "cfg": "ForkJoin_emptySource_demo.cfg",  "expect": "liveness-violation", "family": "combining",   "note": "liveness demo: completes without a value if a source completes empty" }
 ]

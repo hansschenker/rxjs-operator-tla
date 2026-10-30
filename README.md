@@ -46,10 +46,10 @@ PATH. Both commands exit non-zero when any outcome differs from
 
 ## What is checked
 
-Twenty-five configurations. Seventeen are expected to pass; eight are
+Thirty-one configurations. Nineteen are expected to pass; twelve are
 deliberate demonstrations of bugs, hangs or documented hazards and are
 expected to fail in a specific way. On 2026-10-30 both checkers agreed on
-all twenty-five, with identical state counts on every passing run.
+all thirty-one, with identical state counts on every passing run.
 
 | Config | Operator | Expected | States (generated / distinct) |
 |---|---|---|---|
@@ -78,6 +78,12 @@ all twenty-five, with identical state counts on every passing run.
 | `Retry_partial_demo.cfg` | `retry(2)` delivers values of failed attempts | invariant violation | stops at first violation |
 | `CatchError.cfg` | `catchError(selector)`, any fallback | pass | 345 / 210 |
 | `CatchError_fallbackError_demo.cfg` | `catchError` does not catch the fallback's error | invariant violation | stops at first violation |
+| `Zip.cfg` | `zip(a$, b$)` | pass | 2 921 / 1 405 |
+| `Zip_buffer_demo.cfg` | `zip` buffers without bound | invariant violation | stops at first violation |
+| `Zip_notLatest_demo.cfg` | `zip` pairs by position, not recency | invariant violation | stops at first violation |
+| `ForkJoin.cfg` | `forkJoin(a$, b$)` | pass | 3 677 / 1 769 |
+| `ForkJoin_silentB_demo.cfg` | a source never completes | liveness violation | 3 677 / 1 769 |
+| `ForkJoin_emptySource_demo.cfg` | a source completes without a value | liveness violation | 3 677 / 1 769 |
 
 ## Status and caveats
 
