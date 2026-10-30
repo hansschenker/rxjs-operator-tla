@@ -5,16 +5,16 @@ model checking an operator does and does not tell you about the real one.
 
 ## 1. What was verified
 
-All fifty-four configurations in `specs/manifest.json` were run through
+All fifty-nine configurations in `specs/manifest.json` were run through
 both checkers on 2026-10-30:
 
 - **TLC**, version 2026.10.28, the `tla2tools.jar` bundled with the VS Code
   TLA+ extension, on a Temurin 21 JRE.
 - **tla-ts** 0.0.3 from npm, a TypeScript reimplementation of TLC.
 
-Every outcome matched the manifest on both engines. On the twenty-nine
+Every outcome matched the manifest on both engines. On the thirty-one
 passing configurations the two engines reported identical state counts. On
-the twenty-five deliberately failing ones the counts differ for several
+the twenty-eight deliberately failing ones the counts differ for several
 (`Flatten_bug_mergeForSwitch`: TLC 166 / 89, tla-ts 41 / 31;
 `Share_leak_demo`: TLC around 170 / 141, tla-ts 5 / 5; `Share_restart_demo`:
 TLC around 195 / 178, tla-ts 26 / 23), which is expected: a run stops at the
@@ -79,6 +79,11 @@ the counterexample were the same in every case.
 | `ForkJoinGuarded_timer.cfg` | pass | 5 143 / 2 008 | same |
 | `ForkJoinGuarded_timer_empty_demo.cfg` | `BranchCompletesWithValue` violated | varies by run | 72 / 56 |
 | `ForkJoinGuarded_timerDefault.cfg` | pass | 5 359 / 2 072 | same |
+| `SearchAndSaveTimed.cfg` | pass | 151 255 / 51 562 | same |
+| `SearchAndSaveTimed_catch.cfg` | pass | 69 467 / 24 522 | same |
+| `SearchAndSaveTimed_bug_propagate.cfg` | `QueueSurvivesRetries` violated | varies by run | 36 / 27 |
+| `SearchAndSaveTimed_bug_catchSkips.cfg` | `EveryResultAcked` violated | varies by run | 269 / 153 |
+| `SearchAndSaveTimed_bug_latency.cfg` | `AckLatencyBoundedNoRetry` violated | varies by run | 1 851 / 838 |
 
 Every run except the three `Share` configurations finished in under a
 second. Those three, at up to 439 177 distinct states, took two to four
@@ -218,6 +223,9 @@ answer. They are the fastest way to learn what each guard is for.
 | `FallbackRunsAtMostOnce` with `Order = "catchFirst"` | `RetryThenCatch` | violated: error, fallback errors, retry, error, fallback again | `catchError` before `retry`: the fallback's side effects repeat |
 | `Guard = "take1"` under `SpecSilentB` | `ForkJoinGuarded` | `EventuallyTerminal` violated, stuttering | `take(1)` cures a source that never completes, not one that never delivers |
 | `Guard = "takeUntilTimer"` | `ForkJoinGuarded` | `BranchCompletesWithValue` violated: two ticks, the timer fires on an empty branch | `takeUntil(timer)` ends the hang but can make `forkJoin` complete without a value |
+| `SaveFailure = "propagate"` | `SearchAndSaveTimed` | `QueueSurvivesRetries` violated: the first failed save cancels the queue | an unhandled error in a `concatMap` inner ends the pipeline and loses the queued writes |
+| `SaveFailure = "catchInner"` | `SearchAndSaveTimed` | `EveryResultAcked` violated: the pipeline completes with a write missing | `catchError(() => EMPTY)` on a write drops it silently |
+| `AckLatencyBoundedNoRetry` with `SaveFailure = "retryInner"` | `SearchAndSaveTimed` | violated: a retried save is acknowledged at frame 3, bound 2 | retries add to the latency of everything queued behind them |
 | `WF_vars(Fire)` removed from `Spec` | `DebounceTime` | `PendingResolves` violated | a timer that is scheduled but never run |
 | `pending' = None` removed from `SourceError` | `DebounceTime` | `NothingPendingWhenDone` violated | state left behind after teardown |
 
@@ -282,7 +290,7 @@ tla-ts is young (version 0.0.3, a single maintainer) and a wrong "pass"
 from a model checker is the worst failure it can have. What this session
 established:
 
-- On these fifty-four configurations, tla-ts and TLC agree on every outcome,
+- On these fifty-nine configurations, tla-ts and TLC agree on every outcome,
   every violated property, and every state count of a complete run,
   including the three `Share` models of several hundred thousand states.
 - It handled everything the specs use: `EXTENDS` of a local module, model
@@ -317,15 +325,12 @@ the two ever disagreeing.
 
 In order of expected payoff:
 
-1. **`SearchAndSave` with errors and a timed save**: a failing save
-   (does `retry` on the inner keep the queue intact?) and a `Tick` so that
-   the delay between a result and its acknowledgement is bounded.
-2. **`share` with a delayed reset**, `resetOnRefCountZero: () => timer(D)`,
+1. **`share` with a delayed reset**, `resetOnRefCountZero: () => timer(D)`,
    which combines `Share.tla` with the `Tick` machinery of part 04 and is
    where the subscribe-during-reset races live.
-3. **The conformance tests** of section 6, one per spec, so that the models
+2. **The conformance tests** of section 6, one per spec, so that the models
    are tied to RxJS 7's actual behaviour.
-4. **A trace-to-marble script** on top of tla-ts's `check()` output.
+3. **A trace-to-marble script** on top of tla-ts's `check()` output.
 
-The guarded `forkJoin` from the earlier version of this list is done:
-part 05, section 11.
+The guarded `forkJoin` and the timed, failing saves from earlier versions
+of this list are done: part 05, sections 11 and 12.

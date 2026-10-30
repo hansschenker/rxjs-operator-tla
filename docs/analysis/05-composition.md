@@ -251,10 +251,10 @@ one that lets an older search deliver after a newer one has. `concat` and
 are not a live search: part 03's matrix shows that they queue or drop
 search terms, which is a stage-1 property this table does not show.
 
-What the model leaves out, and what the next version would add: errors
-(a failing save, and whether `retry` on the inner keeps the queue intact),
-and a `Tick` so that the time between a result and its acknowledgement is
-bounded. Both are additions to the actions; the properties stay.
+What this model leaves out, errors (a failing save, and whether `retry`
+on the inner keeps the queue intact) and time (a bound on the wait from a
+result to its acknowledgement), section 12 adds. Both are additions to
+the actions; the properties above stay.
 
 ## 8. `retry` and `share`: the order decides who recovers
 
@@ -539,3 +539,99 @@ steps long, was the correction.
 Everything here is `ForkJoin.tla` plus a layer for the guard (`bSeen`,
 `bBranchDone`, `bSub`) and the `Tick` machinery of part 04. The timer
 configurations have about 2 000 distinct states; the others under 400.
+
+## 12. Saves that take time and can fail
+
+Section 7 left two things out of `SearchAndSave`: a save takes no time,
+and a save cannot fail. `SearchAndSaveTimed.tla` adds both, with the
+strategies fixed at `switchMap` and `concatMap` and the handling of a
+failed save as a constant:
+
+```ts
+terms$.pipe(switchMap(search), concatMap(r => save(r).pipe(h)))
+
+h = identity                       // SaveFailure = "propagate"
+h = retry(Count)                   // SaveFailure = "retryInner"
+h = catchError(() => EMPTY)        // SaveFailure = "catchInner"
+```
+
+A save attempt takes between `SaveMin` and `SaveMax` frames, chosen by
+the environment when the attempt starts, and may fail at any point while
+running. Each save record carries the frame its result arrived, how many
+saves were queued or running ahead of it at that moment, the frame its
+current attempt is due, its attempt count, and the frame it was
+acknowledged. Time is the `Tick` machinery of part 04: a due save must
+finish or fail before the frame ends.
+
+There is no liveness property in this module. "Every save is eventually
+acknowledged" is stated the way part 04 recommends, as a deadline
+invariant:
+
+```tla
+AckLatencyBounded == \A m \in DOMAIN save :
+  save[m].state = "done" => Latency(m) <= (save[m].ahead + 1) * SaveMax * MaxAttempts
+```
+
+The wait from a result's arrival to its acknowledgement is at most the
+number of saves ahead of it plus one, times the longest attempt, times
+the attempts a save may take. That bound is tight, which the third
+demonstration shows by dropping the last factor.
+
+What holds for every handling: the invariants of section 7 that still
+apply (one search at a time, saves serialised and in order, one save per
+result, no stale save), the acknowledgements are exactly the done saves
+in result order, a running save is never overdue, and the latency bound.
+What separates the handlings:
+
+| Property | `propagate` | `retry(Count)` | `catchError(() => EMPTY)` |
+|---|---|---|---|
+| a save is cancelled only after more than `Count` failures (`QueueSurvivesRetries`) | fails | holds | holds |
+| on completion every result was acknowledged (`EveryResultAcked`) | holds | holds | fails |
+| latency bound without the retry factor (`AckLatencyBoundedNoRetry`) | holds | fails | holds |
+
+Three demonstrations, one per column:
+
+```
+SearchAndSaveTimed_bug_propagate.cfg
+State 2: TermNext
+State 3: SearchNext(1)    save <<1,1>> active, due at 1
+State 4: SaveError(1)     outDone = "error"   save <<1,1>> cancelled   <- QueueSurvivesRetries violated
+```
+
+An unhandled error in a `concatMap` inner is an error of the whole
+pipeline. The save in flight is cancelled, and so is everything queued
+behind it. One failed write loses all the pending ones.
+
+```
+SearchAndSaveTimed_bug_catchSkips.cfg
+State 4: SearchNext(1)    save <<1,1>> active
+State 5: SearchComplete(1)
+State 6: SaveError(1)     save <<1,1>> skipped   outDone = "complete"   out = <<>>   <- EveryResultAcked violated
+```
+
+Swallowing the error keeps the queue moving, and the pipeline completes
+as if everything had been saved. Nothing downstream can tell that a write
+is missing. `retry` is the handling that satisfies both of these
+properties, and the one the main configuration checks.
+
+```
+SearchAndSaveTimed_bug_latency.cfg      (retry(1))
+State 3: SearchNext(1)    save <<1,1>> active, arrived at 0, due at 1
+State 4: Tick             now = 1
+State 5: SaveError(1)     attempt 2, due at 3
+State 6-7: Tick, Tick     now = 3
+State 8: SaveDone(1)      acknowledged at 3: latency 3, bound without retries 2   <- violated
+```
+
+A retry costs up to another `SaveMax` frames, for the retried save and
+for everything queued behind it. The bound that forgets this is false;
+the one that multiplies by `Count + 1` holds.
+
+The bounds are two terms, one result per search, attempts of one or two
+frames, one retry and a horizon of eight frames, which is exactly the
+worst case for the second queued save. Within those, the `retry`
+configuration has 51 562 distinct states and the `catchError` one
+24 522. The horizon is handled by letting the model stop at `MaxTime`
+rather than by guarding the actions, so late saves are simply cut off,
+which the latency invariant tolerates because it speaks only of saves
+that were acknowledged.

@@ -46,10 +46,10 @@ PATH. Both commands exit non-zero when any outcome differs from
 
 ## What is checked
 
-Fifty-four configurations. Twenty-nine are expected to pass; twenty-five
+Fifty-nine configurations. Thirty-one are expected to pass; twenty-eight
 are deliberate demonstrations of bugs, hangs or documented hazards and are
 expected to fail in a specific way. On 2026-10-30 both checkers agreed on
-all fifty-four, with identical state counts on every passing run.
+all fifty-nine, with identical state counts on every passing run.
 
 | Config | Operator | Expected | States (generated / distinct) |
 |---|---|---|---|
@@ -107,6 +107,11 @@ all fifty-four, with identical state counts on every passing run.
 | `ForkJoinGuarded_timer.cfg` | `forkJoin([a$, b$.pipe(takeUntil(timer(2)))])`, B silent | pass | 5 143 / 2 008 |
 | `ForkJoinGuarded_timer_empty_demo.cfg` | `takeUntil(timer)` completes an empty branch: no value | invariant violation | stops at first violation |
 | `ForkJoinGuarded_timerDefault.cfg` | `takeUntil(timer(2)), defaultIfEmpty(d)`: terminates, always a value | pass | 5 359 / 2 072 |
+| `SearchAndSaveTimed.cfg` | timed saves, `retry(1)` on the inner save: the queue waits | pass | 151 255 / 51 562 |
+| `SearchAndSaveTimed_catch.cfg` | timed saves, `catchError(() => EMPTY)` on the inner save: the queue moves on | pass | 69 467 / 24 522 |
+| `SearchAndSaveTimed_bug_propagate.cfg` | no handling: the first failed save errors the pipeline and cancels the queue | invariant violation | stops at first violation |
+| `SearchAndSaveTimed_bug_catchSkips.cfg` | `catchError(() => EMPTY)` completes with writes silently missing | invariant violation | stops at first violation |
+| `SearchAndSaveTimed_bug_latency.cfg` | a latency bound that forgets the retries | invariant violation | stops at first violation |
 
 ## Status and caveats
 
