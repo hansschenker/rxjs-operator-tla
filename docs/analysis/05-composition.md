@@ -255,3 +255,77 @@ What the model leaves out, and what the next version would add: errors
 (a failing save, and whether `retry` on the inner keeps the queue intact),
 and a `Tick` so that the time between a result and its acknowledgement is
 bounded. Both are additions to the actions; the properties stay.
+
+## 8. `retry` and `share`: the order decides who recovers
+
+A second kind of composition is two operators whose order changes the
+meaning for *other* subscribers. `RetryOnShare.tla` has a source, a
+`share()`, several subscriptions, and a `retry(Count)` in one of two
+places:
+
+```ts
+// Placement = "before": one retry for everybody
+const shared$ = source$.pipe(retry(2), share());
+
+// Placement = "after": a retry per subscription
+const shared$ = source$.pipe(share());
+const s1 = shared$.pipe(retry(2));
+const s2 = shared$;
+```
+
+The module is `Share.tla` (one received stream per subscription, a shared
+subject, a connection count) with `Retry.tla`'s counter added, once
+upstream and once per subscription. Its one new idea is `EndStatus`: a
+downstream `retry` that has received the error but still has retries left
+is `"error"` as far as the shared stream is concerned and `"active"` as
+far as its subscriber is concerned, and the Observable contract has to be
+checked on the second view.
+
+What holds in both placements is what `share` promises regardless: every
+current subscription is in sync at the tail across retries
+(`InSyncAtTail`), and every termination of the source causes at most one
+re-execution however many subscriptions retry (`OneExecutionPerTermination`),
+because the first retry to resubscribe recreates the subject and the
+others join it.
+
+What separates the placements:
+
+| Property | `retry` before `share` | `retry` after `share` |
+|---|---|---|
+| a subscription without its own retry sees an error only after `Count` source errors (`SharedProtection`) | holds | fails |
+| nobody sees an error until the retries are used up (`NoErrorBeforeExhaustion`) | holds | not applicable |
+| a source error reaches every current subscription (`ErrorReachesEveryone`) | never happens | holds |
+| a used-up retry has re-executed the source each time (`RetriesReexecute`) | not applicable | holds with `resetOnError`, fails without |
+
+Two demonstrations:
+
+```
+RetryOnShare_after_demo.cfg      (retry after share, resetOnError: true)
+State 2: Subscribe(s2)     s2 has no retry
+State 3: SourceError       sub[s2] = "error"   srcErrors = 1      <- SharedProtection violated
+```
+
+A `retry` placed after `share` protects exactly one subscription. Anyone
+else on the shared stream receives the first error, which is usually not
+what the author of `shared$.pipe(retry(2))` had in mind.
+
+```
+RetryOnShare_noReset_demo.cfg    (retry after share({resetOnError: false}))
+State 2: Subscribe(s1)     connections = 1
+State 3: Subscribe(s2)
+State 4: SourceError       subject = "error"  (not reset)
+State 5: Retry(s1)         soFar[s1] = 1   sub[s1] = "error"   connections = 1
+State 6: Retry(s1)         soFar[s1] = 2   sub[s1] = "error"   connections = 1   <- RetriesReexecute violated
+```
+
+With `resetOnError: false` the subject stays errored, so each
+resubscription errors again at once. The two retries are used up in two
+steps and the source never ran a second time. This is the configuration
+to check whenever a downstream `retry` "does nothing": the fix is upstream,
+in the `share` config, not in the `retry`.
+
+The model omits `share`'s replay buffer and manual unsubscription, both
+of which `Share.tla` covers on its own; adding them back is a matter of
+copying the actions. Each placement is checked with two subscriptions, two
+values, two values per execution and `Count = 2`, about 53 000 distinct
+states.

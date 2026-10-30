@@ -34,5 +34,9 @@
   { "module": "SearchAndSave", "cfg": "SearchAndSave_bug_mergeSearch.cfg","expect": "invariant-violation","family": "composition", "note": "bug demo: mergeMap for the searches saves a stale result last" },
   { "module": "SearchAndSave", "cfg": "SearchAndSave_bug_switchSave.cfg","expect": "invariant-violation","family": "composition", "note": "bug demo: switchMap for the saves cancels a save in flight (lost write)" },
   { "module": "SearchAndSave", "cfg": "SearchAndSave_bug_mergeSave.cfg", "expect": "invariant-violation","family": "composition", "note": "bug demo: mergeMap for the saves lets writes overlap" },
-  { "module": "SearchAndSave", "cfg": "SearchAndSave_bug_exhaustSave.cfg","expect": "invariant-violation","family": "composition", "note": "bug demo: exhaustMap for the saves drops a result" }
+  { "module": "SearchAndSave", "cfg": "SearchAndSave_bug_exhaustSave.cfg","expect": "invariant-violation","family": "composition", "note": "bug demo: exhaustMap for the saves drops a result" },
+  { "module": "RetryOnShare",  "cfg": "RetryOnShare_before.cfg",         "expect": "success",            "family": "composition", "note": "source$.pipe(retry(2), share()): one retry for everyone" },
+  { "module": "RetryOnShare",  "cfg": "RetryOnShare_after.cfg",          "expect": "success",            "family": "composition", "note": "shared$.pipe(retry(2)) on one subscription: a retry per subscription" },
+  { "module": "RetryOnShare",  "cfg": "RetryOnShare_after_demo.cfg",     "expect": "invariant-violation","family": "composition", "note": "demo: retry after share does not protect the other subscriptions" },
+  { "module": "RetryOnShare",  "cfg": "RetryOnShare_noReset_demo.cfg",   "expect": "invariant-violation","family": "composition", "note": "demo: retry after share({resetOnError: false}) exhausts without re-executing the source" }
 ]

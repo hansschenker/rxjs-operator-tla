@@ -504,10 +504,10 @@ pointwise family: the only independent event is the source's next
 notification. Where they earn a specification is in composition, which is
 the next thing to write for this family:
 
-- `retry` on a shared source: `share()` resets on error, so a retry
-  resubscribes the shared connection and every other subscriber sees the
-  new attempt. `Share.tla` with `ResetOnError = TRUE` already shows the
-  reconnection; a combined model would show who receives what.
+- `retry` on a shared source: done, as `RetryOnShare.tla` (part 05,
+  section 8). `retry` before `share` is one retry for everybody; `retry`
+  after `share` protects only its own subscription, and does nothing at
+  all if `share` was configured not to reset on error.
 - `catchError` inside `switchMap` against outside it: inside, an inner
   error is replaced and the outer keeps running; outside, the first inner
   error ends the whole pipeline. The invariant that separates them is

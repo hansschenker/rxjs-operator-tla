@@ -46,10 +46,10 @@ PATH. Both commands exit non-zero when any outcome differs from
 
 ## What is checked
 
-Thirty-six configurations. Twenty are expected to pass; sixteen are
+Forty configurations. Twenty-two are expected to pass; eighteen are
 deliberate demonstrations of bugs, hangs or documented hazards and are
 expected to fail in a specific way. On 2026-10-30 both checkers agreed on
-all thirty-six, with identical state counts on every passing run.
+all forty, with identical state counts on every passing run.
 
 | Config | Operator | Expected | States (generated / distinct) |
 |---|---|---|---|
@@ -89,6 +89,10 @@ all thirty-six, with identical state counts on every passing run.
 | `SearchAndSave_bug_switchSave.cfg` | `switchMap` for the saves cancels a write in flight | invariant violation | stops at first violation |
 | `SearchAndSave_bug_mergeSave.cfg` | `mergeMap` for the saves lets writes overlap | invariant violation | stops at first violation |
 | `SearchAndSave_bug_exhaustSave.cfg` | `exhaustMap` for the saves drops a result | invariant violation | stops at first violation |
+| `RetryOnShare_before.cfg` | `source$.pipe(retry(2), share())` | pass | 88 097 / 53 554 |
+| `RetryOnShare_after.cfg` | `shared$.pipe(retry(2))` on one subscription | pass | 86 783 / 53 371 |
+| `RetryOnShare_after_demo.cfg` | retry after share leaves the other subscriptions unprotected | invariant violation | stops at first violation |
+| `RetryOnShare_noReset_demo.cfg` | retry after `share({resetOnError: false})` never re-executes the source | invariant violation | stops at first violation |
 
 ## Status and caveats
 
