@@ -263,6 +263,37 @@ Each operator needs this once. After that, the TLA+ spec is trusted for
 pipeline-level reasoning and the property test keeps it honest across RxJS
 versions.
 
+These tests exist, in `tests/`, run with `npm test`. The harness
+(`tests/harness.ts`) generates random source behaviours within a spec's
+bounds, builds them as cold observables scheduled on `TestScheduler`'s
+virtual clock, records every notification with its frame, and exposes
+each source's subscription log. Eighteen properties, 200 behaviours each,
+cover `take`, the pointwise family, `debounceTime`, `cancelAfter`, the
+four flattening strategies, `combineLatest`, `zip`, `forkJoin`, `share`
+and `shareReplay`, `retry` with its options, `catchError`, `filter` then
+`take`, and `switchMap` then `concatMap`. Where a spec's run is
+deterministic for a given event order (`retry`, `catchError`, the three
+combining operators), the test runs the spec's `Next` relation as a
+reference in TypeScript and compares the whole recording; elsewhere it
+asserts the invariants directly. All pass against RxJS 7.8.2.
+
+Three things the conformance run taught, none of them a mismatch between a
+spec and the operator, all of them about the scheduler:
+
+- A marble group `(ab)` takes four frames in run mode, not one, so marble
+  strings cannot place two events in one frame. The harness schedules
+  sources directly on the virtual clock instead; `toMarble` is kept for
+  printing.
+- Same-frame ties resolve by scheduling order. At the deadline frame
+  `takeUntil(timer(D))` wins against a value, because the notifier was
+  subscribed first; a value arriving in the frame a subscription joins a
+  `shareReplay` is delivered before the join. The specs allow both orders,
+  so the tests accept both where it matters and pin the observed one
+  where it is stable.
+- A source is released when it ends on its own or when the result
+  terminates, whichever comes first. `zip` keeps a completed source's
+  subscription closed while its buffered values are still being paired.
+
 **It checks within bounds.** Two values, streams of length four, six frames.
 Most design bugs appear at these sizes; a bug that needs five distinct
 values or a history of twelve events would be missed. When a bound matters,
@@ -336,12 +367,12 @@ the two ever disagreeing.
 
 In order of expected payoff:
 
-1. **The conformance tests** of section 6, one per spec, so that the models
-   are tied to RxJS 7's actual behaviour. With every operator and
-   composition on the original list now specified, this is the item that
-   turns the collection from a model of RxJS into a checked one.
+1. **Conformance tests for the remaining compositions**: `RetryOnShare`,
+   `CatchInSwitchMap`, `RetryThenCatch`, `ForkJoinGuarded`,
+   `SearchAndSaveTimed` and `ShareDelayed`. The harness and the pattern
+   are in `tests/`; each is an afternoon.
 2. **A trace-to-marble script** on top of tla-ts's `check()` output.
 
-The guarded `forkJoin`, the timed failing saves and `share` with a
-delayed reset from earlier versions of this list are done: part 05,
-sections 11 to 13.
+The guarded `forkJoin`, the timed failing saves, `share` with a delayed
+reset and the first round of conformance tests from earlier versions of
+this list are done: part 05, sections 11 to 13, and section 6 above.
