@@ -25,7 +25,7 @@ first one that breaks a property, as a trace that reads like a marble diagram.
 
 1. [The Observable as a state machine](docs/analysis/01-observable-as-state-machine.md): the contract, the modelling pattern every spec uses, and a line-by-line reading of `take(N)`.
 2. [TLA+ syntax, mapped to RxJS](docs/analysis/02-syntax-mapping.md): every construct the specs use, what it means, and its nearest TypeScript or RxJS analogue.
-3. [Operator families and their invariants](docs/analysis/03-operator-families.md): pointwise, truncating, timing, flattening, combining, multicasting and error-handling operators, with the invariants that characterise each family and a checked matrix for the four flattening strategies.
+3. [Operator families and their invariants](docs/analysis/03-operator-families.md): pointwise, truncating, timing, flattening, combining, multicasting and error-handling operators, with the invariants that characterise each family, a checked matrix for the four flattening strategies, and a configuration matrix for `share` and `shareReplay`.
 4. [Time and marble diagrams](docs/analysis/04-time-and-marbles.md): logical time as a `Tick` action, how it lines up with `TestScheduler` frames, and where the two differ.
 5. [Composing operators into pipelines](docs/analysis/05-composition.md): why synchronous stages fuse into one action and asynchronous ones multiply interleavings, with `filter → take` as the worked example.
 6. [Tooling, limits and workflow](docs/analysis/06-tooling-and-workflow.md): running TLC and tla-ts, reading the three kinds of counterexample, what was verified here, and what model checking cannot tell you about the real operator.
@@ -46,10 +46,10 @@ PATH. Both commands exit non-zero when any outcome differs from
 
 ## What is checked
 
-Fourteen configurations. Ten are expected to pass; four are deliberate
-demonstrations of bugs or hangs and are expected to fail in a specific way.
-On 2026-10-30 both checkers agreed on all fourteen, with identical state
-counts on every passing run.
+Nineteen configurations. Thirteen are expected to pass; six are deliberate
+demonstrations of bugs, hangs or documented hazards and are expected to fail
+in a specific way. On 2026-10-30 both checkers agreed on all nineteen, with
+identical state counts on every passing run.
 
 | Config | Operator | Expected | States (generated / distinct) |
 |---|---|---|---|
@@ -67,6 +67,11 @@ counts on every passing run.
 | `CombineLatest.cfg` | `combineLatest([a$, b$])` | pass | 1 598 / 840 |
 | `CombineLatest_SilentB.cfg` | one source never progresses | liveness violation | 1 598 / 840 |
 | `CombineLatest_EmptySource.cfg` | a source ends before the pair forms | liveness violation | 1 598 / 840 |
+| `Share.cfg` | `share()` | pass | 581 739 / 324 355 |
+| `Share_replay.cfg` | `shareReplay(1)` | pass | 750 155 / 439 177 |
+| `Share_replayRefCount.cfg` | `shareReplay({bufferSize: 1, refCount: true})` | pass | 288 884 / 161 967 |
+| `Share_leak_demo.cfg` | `shareReplay(1)` keeps the source running with no subscribers | invariant violation | stops at first violation |
+| `Share_restart_demo.cfg` | `share()` re-executes the source after a reset | invariant violation | stops at first violation |
 
 ## Status and caveats
 

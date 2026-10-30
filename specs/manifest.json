@@ -12,5 +12,10 @@
   { "module": "Pipeline",      "cfg": "Pipeline.cfg",                   "expect": "success",            "family": "composition", "note": "source.pipe(filter(P), take(N))" },
   { "module": "CombineLatest", "cfg": "CombineLatest.cfg",              "expect": "success",            "family": "combining",   "note": "combineLatest([a$, b$])" },
   { "module": "CombineLatest", "cfg": "CombineLatest_SilentB.cfg",      "expect": "liveness-violation", "family": "combining",   "note": "liveness demo: hangs when source B is not fair" },
-  { "module": "CombineLatest", "cfg": "CombineLatest_EmptySource.cfg",  "expect": "liveness-violation", "family": "combining",   "note": "liveness demo: never emits if a source terminates before the pair forms" }
+  { "module": "CombineLatest", "cfg": "CombineLatest_EmptySource.cfg",  "expect": "liveness-violation", "family": "combining",   "note": "liveness demo: never emits if a source terminates before the pair forms" },
+  { "module": "Share",         "cfg": "Share.cfg",                      "expect": "success",            "family": "multicasting","note": "share()" },
+  { "module": "Share",         "cfg": "Share_replay.cfg",               "expect": "success",            "family": "multicasting","note": "shareReplay(1)" },
+  { "module": "Share",         "cfg": "Share_replayRefCount.cfg",       "expect": "success",            "family": "multicasting","note": "shareReplay({bufferSize: 1, refCount: true})" },
+  { "module": "Share",         "cfg": "Share_leak_demo.cfg",            "expect": "invariant-violation","family": "multicasting","note": "demo: shareReplay keeps the source running after the last subscription leaves" },
+  { "module": "Share",         "cfg": "Share_restart_demo.cfg",         "expect": "invariant-violation","family": "multicasting","note": "demo: share() re-executes the source for a subscription after a reset" }
 ]

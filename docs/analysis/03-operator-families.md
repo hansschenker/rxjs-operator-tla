@@ -13,7 +13,7 @@ checked specification in `specs/` or a sketch marked as such.
 | Timing | `debounceTime`, `throttleTime`, `delay`, `timeout`, `auditTime`, custom `cancelAfter` | `now`, deadlines, a pending value | `Tick`, `Fire` | quiet windows, deadlines as invariants | `DebounceTime.tla`, `CancelAfter.tla` |
 | Flattening | `switchMap`, `mergeMap`, `concatMap`, `exhaustMap` | one record per inner | `InnerNext`, `InnerComplete`, `InnerError` | interleaving, cancellation, ordering | `Flatten.tla` |
 | Combining | `combineLatest`, `zip`, `withLatestFrom`, `merge`, `concat`, `forkJoin`, `race` | a second source | the second source's actions | synchronisation, liveness | `CombineLatest.tla` |
-| Multicasting | `share`, `shareReplay`, `connect` | a subscriber count, a connection | subscribe, unsubscribe per subscriber | refCount, replay | sketch only |
+| Multicasting | `share`, `shareReplay`, `connect` | one stream per subscription, a shared subject, a replay buffer | subscribe, unsubscribe per subscription | refCount, multicast, replay | `Share.tla` |
 | Error handling | `catchError`, `retry`, `retryWhen`, `finalize` | an attempt count | resubscribe | bounded attempts, teardown | sketch only |
 
 ## Pointwise operators: the invariant is the operator
@@ -267,37 +267,114 @@ Sketches for the rest of the family:
 | `concat` | `a` delivers, or `b` delivers after `aDone = "complete"` | `b` completes | `b` never starts if `a` never completes |
 | `race` | the first source to deliver wins; the other is unsubscribed | the winner completes | none |
 
-## Multicasting: many subscribers (sketch)
+## Multicasting: many subscriptions, one source
 
 `share()` is the one operator whose state machine cannot be captured by one
 `in`/`out` pair, because it has one input and several outputs that start and
-stop independently. A specification needs:
+stop independently of each other and of the source. RxJS 7 implements
+`share()`, `shareReplay(n)` and `shareReplay({refCount: true})` as a single
+operator, `share(config)`, and `Share.tla` does the same: the constants are
+the configuration.
+
+| RxJS | `BufferSize` | `ResetOnComplete` | `ResetOnError` | `ResetOnRefCountZero` |
+|---|---|---|---|---|
+| `share()` | 0 | TRUE | TRUE | TRUE |
+| `shareReplay(1)` | 1 | FALSE | TRUE | FALSE |
+| `shareReplay({bufferSize: 1, refCount: true})` | 1 | FALSE | TRUE | TRUE |
+
+The variables follow the implementation's own state. One stream per
+subscription replaces the single `out`:
 
 ```tla
-CONSTANT Subscribers
-VARIABLES in, inDone,                             \* the shared source, once connected
-          subs,          \* [Subscribers -> {"off", "on", "complete", "error"}]
-          outs,          \* [Subscribers -> Seq(Values)]
-          connected,     \* BOOLEAN: is the source subscribed?
-          refCount
+VARIABLES sub,          \* [Subs -> {"idle", "on", "complete", "error", "off"}]
+          received,     \* [Subs -> Seq(Values)]: each subscription's stream
+          conn,         \* [Subs -> Nat]: which connection it joined
+          subject,      \* "none" | "live" | "complete" | "error": the shared Subject
+          buffer,       \* the ReplaySubject's buffer; always empty for share()
+          srcSent,      \* what the current connection has delivered
+          connections   \* how many times the source has been subscribed
+
+RefCount == Cardinality({s \in Subs : sub[s] = "on"})
 ```
 
-with actions `Subscribe(s)`, `Unsubscribe(s)`, `SourceNext(v)` (delivered to
-every `s` with `subs[s] = "on"`) and `SourceEnd(how)`. The properties that
-matter are the ones that have had bugs in RxJS's history:
+Four actions: `Subscribe(s)` creates the subject and connects the source if
+there is none, then replays the buffer to the newcomer; `Unsubscribe(s)`
+resets and disconnects if the newcomer was the last and the configuration
+says so; `SourceNext(v)` appends to the buffer and to every `"on"`
+subscription in the same step; `SourceEnd(how)` terminates every `"on"`
+subscription and either resets the subject or leaves it in its terminal
+state. A reset is `subject' = "none"`, after which the next subscription
+starts a new connection. The model is safety-only: the interesting content
+of this family is which interleavings are allowed, not progress.
 
-- `connected <=> refCount > 0` (the refCount rule), as an invariant;
-- `SourceNext` is delivered to all current subscribers, not a subset;
-- after `SourceEnd`, late subscribers get the terminal immediately
-  (`resetOnComplete`), or a fresh connection, depending on configuration;
-- a subscribe that arrives in the same step as the last unsubscribe does not
-  reconnect (`resetOnRefCountZero` races).
+The invariants that hold for all three configurations are the multicast
+guarantees:
 
-`shareReplay(n)` adds a buffer and the invariant that a new subscriber
-receives `SubSeq(in, Len(in) - n + 1, Len(in))` first. This family is the
-most valuable next spec to write, because its bugs are exactly the
-interleavings of subscribe and unsubscribe that TLC enumerates and tests
-rarely cover.
+| Invariant | Says |
+|---|---|
+| `OnMeansLive` | a subscription receives only while the shared source is live |
+| `NoGaps` | each subscription's stream is a contiguous window of its connection's values |
+| `InSyncAtTail` | every current subscription has seen everything up to the latest value |
+| `BufferIsRecent` | the buffer is the last `BufferSize` values of the connection |
+| `ReplayCoversBuffer` | a subscription receives at least the last `BufferSize` values, however late it joined |
+| `MulticastStep` (action) | a source value reaches every current subscription in the same step |
+| `NoDeliveryAfterEnd` (action) | nothing reaches a subscription that has ended or left |
+| `PerSubscriberContract` (action) | every subscription's stream respects the Observable contract |
+
+Two properties separate the configurations, and both correspond to
+behaviour that RxJS users regularly get wrong:
+
+| Property | Says | `share()` | `shareReplay(1)` | `shareReplay({refCount: true})` |
+|---|---|---|---|---|
+| `SourceStopsWhenUnused` | the source never runs with nobody subscribed | holds | fails | holds |
+| `CompletedStays` | once completed, the source is never subscribed again | trivial (a completed subject is reset) | holds | holds |
+| `SingleExecution` | the source is subscribed at most once | fails | fails | fails |
+
+**`Share_leak_demo.cfg`** checks `shareReplay(1)` against
+`SourceStopsWhenUnused`. The counterexample is two steps long:
+
+```
+State 2: Subscribe(s1)     subject = "live"   RefCount = 1   connections = 1
+State 3: Unsubscribe(s1)   subject = "live"   RefCount = 0        <- SourceStopsWhenUnused violated
+```
+
+This is the documented `shareReplay` hazard: with the default
+`refCount: false`, the source keeps running after the last subscriber
+leaves, and the model lets `SourceNext` keep filling the buffer with
+nobody listening. The same configuration with `ResetOnRefCountZero = TRUE`
+passes.
+
+**`Share_restart_demo.cfg`** checks `share()` against `SingleExecution`,
+and the counterexample is the re-execution people are surprised by:
+
+```
+State 2: Subscribe(s1)     connections = 1
+State 3: Unsubscribe(s1)   subject = "none"       (reset on refCount zero)
+State 4: Subscribe(s2)     connections = 2        <- SingleExecution violated
+```
+
+A subscription that arrives after everyone has left, or after the source
+has completed, gets a fresh execution of the source. `shareReplay` fails
+the same invariant through its `ResetOnError` path, which is the retry
+behaviour it has by design; with errors removed from the model it holds.
+
+What was checked: three subscriptions, two values, three values per
+connection and up to two connections. These are the largest models in the
+repository (`shareReplay(1)` reaches 439 177 distinct states), because each
+subscription's window into the stream is independent state. Both checkers
+report identical counts.
+
+Modelling choices worth knowing:
+
+- Each subscription id subscribes once. A subscriber that resubscribes is
+  a second id, which keeps the state space finite and the traces readable.
+- Resets are immediate. RxJS also accepts a notifier Observable for a
+  delayed reset (`resetOnRefCountZero: () => timer(…)`); modelling that
+  needs the `Tick` machinery from part 04 and is the natural extension.
+- `ReplaySubject`'s `windowTime` is not modelled; the buffer is bounded by
+  count only.
+- A source that completes synchronously on connection is covered: it is
+  the trace where `SourceEnd` follows `Subscribe` immediately.
 
 ## Error handling: resubscription (sketch)
 
